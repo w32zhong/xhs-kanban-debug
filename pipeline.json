@@ -1,20 +1,29 @@
 {
-  "stage": "publish-input-rehearsal-bottom-up",
+  "stage": "failure-coordination-v0.1",
   "workspace": "/worktrees/folder-1/xhs-kanban-debug",
-  "board_prefix": "xhs-debug-publish-input-rehearsal",
+  "board_prefix": "xhs-debug-failure-coordination",
   "max_parallel": 1,
   "tasks": [
     {
-      "key": "publish_input_rehearsal",
-      "name": "发布输入演练-小虾-Qwen",
+      "key": "failure_coordination",
+      "name": "失败协调-Qwen",
       "assignee": "agent-26c319b9362c7cec",
-      "keyword": "Codex连续长时间任务诀窍",
-      "target_title": "Codex连续长时间任务诀窍",
-      "target_comment_author": "煎饼果子松鼠",
-      "target_comment_excerpt": "意思是plan生成计划后",
-      "approved_draft": "不会写代码也没关系，可以先让助手边做边保存进度，断了就查看上次停在哪，再接着往下跑。你现在用的是什么工具？",
-      "prompt": "prompts/publish-input-rehearsal-worker.md",
-      "max_runtime": "12m"
+      "prompt": "prompts/failure-coordinator.md",
+      "max_runtime": "5m",
+      "param_vars": {
+        "PUBLISH_STATUS_LITERAL": "SEND_FAILED",
+        "VERIFY_STATUS_LITERAL": "THREAD_UNCONFIRMED",
+        "SEND_CLICKED_LITERAL": "YES",
+        "EDITOR_RESET_AFTER_SEND_LITERAL": "UNKNOWN",
+        "TARGET_CONTEXT_MATCH_LITERAL": "YES",
+        "THREAD_EXHAUSTED_LITERAL": "NO",
+        "EXACT_DRAFT_COUNT_LITERAL": "UNKNOWN",
+        "EXACT_DRAFT_OUTSIDE_TARGET_LITERAL": "UNKNOWN",
+        "CONTENT_MODIFIED_LITERAL": "NO"
+      },
+      "body_vars": {
+        "SCENARIO_ID": "ambiguous-send-outcome"
+      }
     }
   ]
 }

@@ -76,10 +76,15 @@ def main() -> None:
     if guard.returncode:
         raise SystemExit("browser resource guard failed; refusing to start another iteration")
 
-    # Load rotation state. Explicit --target-id wins; otherwise rotate.
+    # Publish stages rotate through the target pool. Non-browser stages such as
+    # failure coordination may omit target literals entirely.
     state = load_state()
-    target = selected_target if selected_target is not None else pick_next_target(state)
-    target_idx = POOL["targets"].index(target)
+    uses_target_pool = selected_target is not None or any(
+        task.get("keyword") or task.get("target_title") or task.get("target_comment_author")
+        for task in config["tasks"]
+    )
+    target = selected_target if selected_target is not None else (pick_next_target(state) if uses_target_pool else {})
+    target_idx = POOL["targets"].index(target) if uses_target_pool else None
 
     suffix = time.strftime("%Y%m%d-%H%M%S")
     board = f"{config['board_prefix']}-{suffix}"
@@ -116,6 +121,12 @@ def main() -> None:
             param_content += f"TARGET_COMMENT_EXCERPT_LITERAL={shlex.quote(target_excerpt)}\n"
         if approved_draft:
             param_content += f"APPROVED_DRAFT_LITERAL={shlex.quote(approved_draft)}\n"
+        # Stage-specific immutable inputs (for example failure-coordination
+        # statuses) belong in pipeline.json rather than the worker prompt.
+        for key, value in task.get("param_vars", {}).items():
+            if not key or not key.replace("_", "").isalnum() or not key[0].isalpha():
+                raise SystemExit(f"invalid param_vars key: {key!r}")
+            param_content += f"{key}={shlex.quote(str(value))}\n"
         param_path.write_text(param_content, encoding="utf-8")
 
         body_lines = [
@@ -125,7 +136,7 @@ def main() -> None:
         ]
         for key, value in task.get("body_vars", {}).items():
             body_lines.append(f"{key}: {value}")
-        body_lines.append("禁止 git/pwd/env/目录搜索/hermes kanban CLI/SQLite/额外 skill；不要发布任何内容。")
+        body_lines.append("禁止 git/pwd/env/目录搜索/hermes kanban CLI/SQLite/额外 skill；严格遵守所引用 prompt 的副作用边界。")
 
         args = [
             "--board", board, "create", task["name"],
@@ -160,7 +171,7 @@ def main() -> None:
     )
 
     # Update rotation state
-    if target_idx not in state["used_indices"]:
+    if target_idx is not None and target_idx not in state["used_indices"]:
         state["used_indices"].append(target_idx)
     state["run_count"] = state.get("run_count", 0) + 1
     state["last_target_id"] = target.get("id", "unknown")
@@ -173,7 +184,7 @@ def main() -> None:
         "created": created,
         "dispatch": dispatched,
         "started_at": int(time.time()),
-        "target_rotated_from_pool": True,
+        "target_rotated_from_pool": uses_target_pool,
         "target_id": target.get("id", "unknown"),
         "target_layout": target.get("layout_goal", ""),
         "run_number": state["run_count"],

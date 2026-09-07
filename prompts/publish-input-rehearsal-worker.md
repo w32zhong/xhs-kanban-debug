@@ -104,10 +104,24 @@ agent-browser snapshot -i -c
    - **Vision 不是常规步骤，只是卡住时的一次兜底。** 在 snapshot 已经明确作者、评论前缀、直接回复入口、editable 和发送状态时，禁止截图和 vision，直接继续。
    - **普通或唯一作者楼层正常最多 1 次有效 Vision。** 只有 `scrollintoview` 已把目标作者放进视觉 viewport，并在一次额外 wait+snapshot 后仍有关键字段不可见，才保存原始截图并调用。
 - 若该调用完全没有回答指定字段（例如只描述全页/笔记头部、输出被截断在评论区之前），允许对**同一截图、同一问题逐字不变**重试一次，记为 `VISION_FORMAT_RETRY`。只有这种格式失败允许重试；回答了字段但结论不确定时不得重试。重试仍不回答即 `NEEDS_VERIFIER`。
-   - **同一作者有多个一级楼层时，严格允许最多 2 次 Vision**，因为安全闭环需要两个不同事实：
-     1. 点击前 Vision：在 `scrollintoview` 后的截图中逐字区分多个同作者楼层，指出哪个楼层以前缀变量开头，并报告该楼层 action row 是 `点赞数 + 回复气泡数` 还是 `点赞数 + 文字回复`。按 a11y 中同作者楼层的页面顺序绑定对应 ref；读不清即 `NEEDS_VERIFIER`，不点击。
-     2. 点击后 Vision：只核验底部是否显示 `回复 <目标作者>`、编辑器是否为空。对象不符即 `WRONG_REPLY_TARGET`；读不清即 `NEEDS_VERIFIER`，不输入。
-   - 多楼层的两次有效 Vision 必须各自只回答该阶段缺失事实。任一阶段若发生纯格式失败，也仅允许对同一截图和同一问题原样重试一次；schema 另记 `vision_format_retries`。禁止因业务结论不确定而重复问、截图加工或扩大到其他评论。
+   - **同一作者有多个一级楼层时，严格允许最多 2 次有效 Vision：一次点击前、一次点击后。**
+       1. 点击前唯一一次业务 Vision 必须在同一个问题中完成两个事实：指出正文以前缀变量开头的是从上到下第几个同作者一级楼层，并报告该楼层 action row 的点赞与直接回复动作文字/数值。按 a11y 页面顺序绑定 ref；读不清即 `NEEDS_VERIFIER`，不点击。禁止先问一次“目标是否存在”，再用第二次区分位置。
+       2. 点击后第二次 Vision 只核验底部是否显示 `回复 <目标作者>`、编辑器是否为空。对象不符即 `WRONG_REPLY_TARGET`；读不清即 `NEEDS_VERIFIER`，不输入。
+      - 多楼层点击前固定问题：
+
+   ```bash
+   source "<PARAM_FILE>"
+   printf -v PRECLICK_VISION_QUESTION '忽略左侧图片/视频、笔记正文、搜索背景和 AI 面板。只检查右侧评论栏。作者「%s」存在多个一级评论。请一次性回答：1) 正文以「%s」开头的是从上到下第几个「%s」一级楼层；2) 该楼层 action row 的点赞动作和直接回复动作分别显示什么文字或数字。只回答这两点；读不清写 UNKNOWN。' "$TARGET_COMMENT_AUTHOR_LITERAL" "$TARGET_COMMENT_EXCERPT_LITERAL" "$TARGET_COMMENT_AUTHOR_LITERAL"
+   ```
+
+      - 多楼层点击后固定问题：
+
+   ```bash
+   source "<PARAM_FILE>"
+   printf -v POSTCLICK_VISION_QUESTION '忽略左侧图片/视频、笔记正文、搜索背景和 AI 面板。只检查右侧评论栏和底部编辑器。逐项回答：1) 底部是否逐字显示「回复 %s」；2) 编辑器是否为空。每项只答 YES/NO；不在图内写 NOT_IN_VIEW。' "$TARGET_COMMENT_AUTHOR_LITERAL"
+   ```
+
+      - 任一阶段若发生纯格式失败，仅允许对同一截图和同一问题原样重试一次；schema 另记 `vision_format_retries`。格式重试不算新的有效业务 Vision。禁止因业务结论不确定而重复问、截图加工或扩大到其他评论。
 - Vision 提示必须直接引用变量代表的目标作者与评论前缀，要求只看**右侧评论栏和底部编辑器**；禁止使用“first top-level comment”这种依赖整页相对位置的描述。为避免在推理中重写字面值，固定通过 shell 生成提示：
 
 ```bash
@@ -140,17 +154,25 @@ agent-browser snapshot -i -c
 2. `发送`按钮从 disabled 变为 enabled；
 3. 若 a11y 明确显示回复对象，则必须仍是目标作者；若 a11y 不暴露，但输入前已通过 vision 确认且没有点击其他楼层，则记录 `PRECHECK_CARRIED_FORWARD`，不要为同一事实再次调用 vision。
 
-逐字比对允许一次只读命令，不得在输出中打印定稿：
+### 输入后 ref 更新与逐字验收（必须机械执行）
+
+小红书在输入后会重渲染详情区域，**输入前的 editable ref 立即视为失效**。禁止对输入前 ref 执行 `get text`。
+
+输入完成并 wait 500 后，只执行一次 fresh `snapshot -i -c`。从该 snapshot 获取唯一的 `paragraph ... editable [contenteditable]` 的**新 ref**，以及最新的 `button "发送"` ref；发送按钮必须不带 `[disabled]`。
+
+然后仅对 fresh editable ref 执行一次只读逐字比对：
 
 ```bash
 source "<PARAM_FILE>"
-text=$(agent-browser get text @<最新 editable ref>)
+text=$(agent-browser get text @<输入后 fresh snapshot 中的 editable ref>)
 if [ "$text" = "$APPROVED_DRAFT_LITERAL" ]; then printf 'TEXT_EXACT=YES\n'; else printf 'TEXT_EXACT=NO\n'; fi
 ```
 
-输入后禁止再次调用 vision。文字正确性由只读变量比对确认；发送 enabled 由 a11y 中 `button "发送"` 不再带 `[disabled]` 确认。回复对象沿用输入前证据，因为中间没有任何楼层切换动作。
+若返回值明显包含页面其他区域或长度大于定稿长度，这是 `STALE_OR_WRONG_REF`，不是正文不一致。禁止字符数/codepoint、grep/sed/awk、枚举 contenteditable、tail snapshot、额外 snapshot 和脚本诊断；直接进入 I5 清空并报告 `EDITOR_REF_INVALID`。
 
-出现重复文本、缺字、改字或错误作者时，绝不发送，进入 I5 清空并报告 `TEXT_MISMATCH` 或 `WRONG_REPLY_TARGET`。
+禁止解析 snapshot 文本提取 editable name。输入后禁止再次调用 vision。文字正确性仅由 fresh ref 的只读变量比对确认；发送 enabled 由 fresh snapshot 确认。
+
+只有 fresh ref 读到编辑器正文但与变量不等时，才报告 `TEXT_MISMATCH`。出现重复文本、缺字、改字或错误作者时，绝不发送，进入 I5 清空。
 
 ## I5：强制清空与安全停止
 

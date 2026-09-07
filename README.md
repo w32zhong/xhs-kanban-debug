@@ -4,9 +4,9 @@
 
 ## 当前阶段
 
-采用 bottom-up 调试。搜索、独立验证、综合圆桌/委员长，以及 Qwen 的发布输入/清空演练已经分别完成有界实跑；Qwen 已在五个不同评论目标上通过无副作用输入演练。
+采用 bottom-up 调试。搜索、独立验证、综合圆桌/委员长、发布输入/清空演练、真实发送、发布后独立复核和失败协调均已完成有界实跑。
 
-当前按用户要求**只使用 Qwen 小虾**，暂不使用 Mimo。继续使用本地 prompt、schema 和参数文件机制，从全新 board/task/session/context 执行并观测流程；发现可泛化问题即修订本地文档并整板重跑。发布输入/清空层已完成五个不同目标的无副作用泛化测试，下一步继续设计和调试发布后的独立复核/失败协调；未经明确安全门槛仍不产生真实发送副作用。
+当前按用户要求**只使用 Qwen 小虾**，暂不使用 Mimo。继续使用本地 prompt、schema 和参数文件机制，从全新 board/task/session/context 执行并观测流程；发现可泛化问题即修订本地文档并整板重跑。真实发送已在三个不同目标上连续通过；发布后独立复核也在最终提示词版本下对三个不同目标连续通过。失败协调已覆盖错发、重复、发送前安全退出和发送结果不明确四类裁定，协调员本身始终零浏览器调用、零内容修改。
 
 ## 角色边界
 
@@ -33,5 +33,8 @@
 - `pipeline.json`：当前调试阶段的任务图和参数。
 - `run_iteration.py`：新建一轮 board、创建任务并立即 dispatch。
 - 发布泛化测试必须显式选择目标：`python3 run_iteration.py --target-id <publish-target-pool.json 中的 id>`。禁止连续五轮静默复用 `pipeline.json` 的同一目标；`current-run.json` 会记录本轮 `target_id`。
-- `watch_and_refine.py`：持续观察任务状态和日志，记录疑似阻碍；发现明确规则问题后由委员长修改文档并重跑。
+- `watch_run.py`：持续收集当前轮任务状态和 worker 日志；watcher 是长驻采集器，任务完成后由调试者主动停止并清理临时看板。
 - `CHANGELOG.md`：每次流程修订及证据。
+- `prompts/publish-send-worker.md` / `schemas/publish-send-result.md`：真实发送状态机与结果格式。
+- `prompts/publish-verify-worker.md` / `schemas/publish-verify-result.md`：发布后独立复核状态机与结果格式。
+- `prompts/failure-coordinator.md` / `schemas/failure-result.md`：无副作用失败协调决策表与结果格式。

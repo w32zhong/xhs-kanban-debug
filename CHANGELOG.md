@@ -1,5 +1,14 @@
 # 流程调试变更记录
 
+## v0.47 — 真实发送、独立复核与失败协调收敛
+
+- 真实发送在 target-c、target-d、target-e 三个不同目标上连续通过：`SEND_SUCCESS`、`READ_TEXT`、`vision_calls=0`，发送后编辑器重置。
+- 新增 `publish-verify-worker.md` 与结果 schema；修复单评论楼层的可见线程识别、状态机从头重跑、未穷尽线程误报不存在等问题。
+- 最终独立复核在 target-c、target-d、target-a 三个不同目标上连续通过：目标线程已穷尽、定稿逐字恰好一次、其他楼层无重复、零 Vision、零页面修改。
+- 新增纯结构化失败协调：错发与重复只标记人工处理并禁止重试；明确未发送且复核确认不存在时仅允许全新 session 重试一次；发送结果不明确或线程未穷尽时禁止自动重试并转人工复核。
+- 扩展 runner 的 `param_vars`，使非浏览器阶段可从参数文件读取不可变状态；非发布阶段不再强制轮换目标池。
+- 每轮均实际使用 `process wait` 观察 watcher，并在完成后删除临时看板、停止 watcher、关闭任务标签。最终只保留正式 `xhs-debug` 看板与 Kanban UI 标签。
+
 ## v0.1 — 搜索阶段最小闭环
 
 - 从旧目录复制资料到 `source-archive/`，明确旧资料仅是可疑参考。
