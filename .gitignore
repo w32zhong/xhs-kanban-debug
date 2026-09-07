@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+
+# 运行时生成物 — 每次调试都会产生大量截图和 watch log
+evidence/
+logs/
+
+# 运行时状态文件 — 每轮调度生成，不是源代码
+current-run.json
+target-rotation-state.json
+runtime-params/
+
+# 敏感信息
+.env
+*.pem
+*.key
+
+# 编辑器 / 系统
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db

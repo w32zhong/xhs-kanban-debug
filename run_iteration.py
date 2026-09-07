@@ -1,0 +1,188 @@
+#!/usr/bin/env python3
+"""Create a fresh bottom-up debug board and dispatch it immediately.
+
+Reads targets from publish-target-pool.json and rotates through them,
+so each iteration uses a different target. Tracks used targets in
+target-rotation-state.json.
+"""
+from __future__ import annotations
+
+import json
+import argparse
+import shlex
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent
+CONFIG = json.loads((ROOT / "pipeline.json").read_text(encoding="utf-8"))
+POOL = json.loads((ROOT / "publish-target-pool.json").read_text(encoding="utf-8"))
+STATE_FILE = ROOT / "target-rotation-state.json"
+
+
+def load_state() -> dict:
+    if STATE_FILE.exists():
+        return json.loads(STATE_FILE.read_text(encoding="utf-8"))
+    return {"used_indices": [], "run_count": 0}
+
+
+def save_state(state: dict) -> None:
+    STATE_FILE.write_text(json.dumps(state, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def pick_next_target(state: dict) -> dict:
+    targets = POOL["targets"]
+    used = set(state.get("used_indices", []))
+    # Find next unused target
+    for i, t in enumerate(targets):
+        if i not in used:
+            return t
+    # All used — reset and start over
+    state["used_indices"] = []
+    save_state(state)
+    return targets[0]
+
+
+def run(*args: str, json_output: bool = False) -> str | dict | list:
+    cmd = ["hermes", "kanban", *args]
+    proc = subprocess.run(cmd, text=True, capture_output=True)
+    if proc.returncode:
+        raise SystemExit(f"command failed: {' '.join(cmd)}\n{proc.stdout}\n{proc.stderr}")
+    if json_output:
+        return json.loads(proc.stdout)
+    return proc.stdout.strip()
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--target-id", help="Override publish rehearsal literals from publish-target-pool.json")
+    cli = parser.parse_args()
+
+    config = json.loads(json.dumps(CONFIG))
+    selected_target = None
+    if cli.target_id:
+        pool = json.loads((ROOT / "publish-target-pool.json").read_text(encoding="utf-8"))
+        selected_target = next((item for item in pool["targets"] if item["id"] == cli.target_id), None)
+        if selected_target is None:
+            raise SystemExit(f"unknown target id: {cli.target_id}")
+        if len(config["tasks"]) != 1:
+            raise SystemExit("--target-id requires exactly one task in pipeline.json")
+        task = config["tasks"][0]
+        for key in ("keyword", "target_title", "target_comment_author", "target_comment_excerpt"):
+            task[key] = selected_target[key]
+
+    guard = subprocess.run([sys.executable, str(ROOT / "resource_guard.py")], text=True)
+    if guard.returncode:
+        raise SystemExit("browser resource guard failed; refusing to start another iteration")
+
+    # Load rotation state. Explicit --target-id wins; otherwise rotate.
+    state = load_state()
+    target = selected_target if selected_target is not None else pick_next_target(state)
+    target_idx = POOL["targets"].index(target)
+
+    suffix = time.strftime("%Y%m%d-%H%M%S")
+    board = f"{config['board_prefix']}-{suffix}"
+    run("boards", "create", board, "--name", f"小红书流程调试 · {suffix}")
+    run("boards", "set-default-workdir", board, config["workspace"])
+    run("boards", "switch", board)
+
+    params_dir = ROOT / "runtime-params"
+    params_dir.mkdir(exist_ok=True)
+    created: list[dict] = []
+    ids_by_key: dict[str, str] = {}
+
+    # Create tasks sequentially so parent IDs are available at creation time.
+    for index, task in enumerate(config["tasks"], start=1):
+        session_name = f"xhs-{suffix[-6:]}-{index}"
+        prompt_path = str(ROOT / task["prompt"])
+        param_path = params_dir / f"{session_name}.sh"
+
+        # Use target pool data, falling back to pipeline.json for non-overridden fields
+        keyword = target.get("keyword") or task.get("keyword", "")
+        target_title = target.get("target_title") or task.get("target_title", "")
+        target_author = target.get("target_comment_author") or task.get("target_comment_author", "")
+        target_excerpt = target.get("target_comment_excerpt") or task.get("target_comment_excerpt", "")
+        approved_draft = target.get("approved_draft") or task.get("approved_draft", "")
+
+        param_content = f"SESSION_NAME={shlex.quote(session_name)}\n"
+        if keyword:
+            param_content += f"KEYWORD_LITERAL={shlex.quote(keyword)}\n"
+        if target_title:
+            param_content += f"TARGET_TITLE_LITERAL={shlex.quote(target_title)}\n"
+        if target_author:
+            param_content += f"TARGET_COMMENT_AUTHOR_LITERAL={shlex.quote(target_author)}\n"
+        if target_excerpt:
+            param_content += f"TARGET_COMMENT_EXCERPT_LITERAL={shlex.quote(target_excerpt)}\n"
+        if approved_draft:
+            param_content += f"APPROVED_DRAFT_LITERAL={shlex.quote(approved_draft)}\n"
+        param_path.write_text(param_content, encoding="utf-8")
+
+        body_lines = [
+            "不要执行任何 Kanban/项目环境探索；任务参数已完整给出。",
+            f"第一步读取并严格逐步执行：{prompt_path}",
+            f"PARAM_FILE: {param_path}",
+        ]
+        for key, value in task.get("body_vars", {}).items():
+            body_lines.append(f"{key}: {value}")
+        body_lines.append("禁止 git/pwd/env/目录搜索/hermes kanban CLI/SQLite/额外 skill；不要发布任何内容。")
+
+        args = [
+            "--board", board, "create", task["name"],
+            "--body", "\n".join(body_lines),
+            "--assignee", task["assignee"],
+            "--workspace", f"dir:{config['workspace']}",
+            "--max-runtime", task.get("max_runtime", "12m"),
+            "--max-retries", "1",
+        ]
+        for parent_key in task.get("parents", []):
+            if parent_key not in ids_by_key:
+                raise SystemExit(f"unknown/uncreated parent key {parent_key!r} for task {task['key']!r}")
+            args.extend(["--parent", ids_by_key[parent_key]])
+        args.append("--json")
+
+        item = run(*args, json_output=True)
+        if not isinstance(item, dict) or "id" not in item:
+            raise SystemExit(f"unexpected create response: {item!r}")
+        ids_by_key[task["key"]] = item["id"]
+        created.append({
+            "key": task["key"],
+            "id": item["id"],
+            "title": task["name"],
+            "session_name": session_name,
+            "target_id": target.get("id", "unknown"),
+            "target_title": target_title,
+        })
+
+    dispatched = run(
+        "--board", board, "dispatch", "--max", str(config["max_parallel"]), "--json",
+        json_output=True,
+    )
+
+    # Update rotation state
+    if target_idx not in state["used_indices"]:
+        state["used_indices"].append(target_idx)
+    state["run_count"] = state.get("run_count", 0) + 1
+    state["last_target_id"] = target.get("id", "unknown")
+    state["last_target_title"] = target.get("target_title", "")
+    save_state(state)
+
+    state_out = {
+        "board": board,
+        "stage": config.get("stage"),
+        "created": created,
+        "dispatch": dispatched,
+        "started_at": int(time.time()),
+        "target_rotated_from_pool": True,
+        "target_id": target.get("id", "unknown"),
+        "target_layout": target.get("layout_goal", ""),
+        "run_number": state["run_count"],
+    }
+    (ROOT / "current-run.json").write_text(
+        json.dumps(state_out, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
+    print(json.dumps(state_out, ensure_ascii=False, indent=2))
+
+
+if __name__ == "__main__":
+    main()

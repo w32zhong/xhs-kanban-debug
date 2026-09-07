@@ -1,0 +1,20 @@
+{
+  "stage": "publish-input-rehearsal-bottom-up",
+  "workspace": "/worktrees/folder-1/xhs-kanban-debug",
+  "board_prefix": "xhs-debug-publish-input-rehearsal",
+  "max_parallel": 1,
+  "tasks": [
+    {
+      "key": "publish_input_rehearsal",
+      "name": "发布输入演练-小虾-Qwen",
+      "assignee": "agent-26c319b9362c7cec",
+      "keyword": "Codex连续长时间任务诀窍",
+      "target_title": "Codex连续长时间任务诀窍",
+      "target_comment_author": "煎饼果子松鼠",
+      "target_comment_excerpt": "意思是plan生成计划后",
+      "approved_draft": "不会写代码也没关系，可以先让助手边做边保存进度，断了就查看上次停在哪，再接着往下跑。你现在用的是什么工具？",
+      "prompt": "prompts/publish-input-rehearsal-worker.md",
+      "max_runtime": "12m"
+    }
+  ]
+}

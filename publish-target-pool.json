@@ -1,0 +1,62 @@
+{
+  "purpose": "连续五轮发布输入演练使用不同目标，避免只对单一页面结构过拟合。每轮启动前由板外调试者确认目标仍存在且未产生我方公开回复。",
+  "targets": [
+    {
+      "id": "target-a-single-comment-image-row",
+      "keyword": "AI长任务总是中断",
+      "target_title": "Codex任务做到一半中断了？",
+      "target_comment_author": "明天就发大财",
+      "target_comment_excerpt": "^_^",
+      "approved_draft": "试试把长任务拆成小段，每段存好进度，断了就从上次的检查点接着跑。",
+      "layout_goal": "单评论；楼层含 image ref；验证不会误点图片",
+      "status": "validated"
+    },
+    {
+      "id": "target-b-plan-question",
+      "keyword": "Codex连续长时间任务诀窍",
+      "target_title": "Codex连续长时间任务诀窍",
+      "target_comment_author": "煎饼果子松鼠",
+      "target_comment_excerpt": "意思是plan生成计划后",
+      "approved_draft": "不会写代码也没关系，可以先让助手边做边保存进度，断了就查看上次停在哪，再接着往下跑。你现在用的是什么工具？",
+      "layout_goal": "不同帖子和长文本评论；验证作者+评论前缀双匹配",
+      "status": "validated"
+    },
+    {
+      "id": "target-c-nested-replies",
+      "keyword": "🔥万能炒菜公式，炒菜不翻车！",
+      "target_title": "🔥万能炒菜公式，炒菜不翻车！",
+      "target_comment_author": "酸奶",
+      "target_comment_excerpt": "这样我感觉做饭真的很简单",
+      "approved_draft": "我也觉得，先学会几个万能公式，再慢慢创新，厨艺进步很快的。",
+      "layout_goal": "图文帖子；嵌套子评论；验证回复绑定不会点到子评论的回复按钮",
+      "status": "new"
+    },
+    {
+      "id": "target-d-flat-comments",
+      "keyword": "救命❗️男生这些穿搭雷区，真的很容易显“土”",
+      "target_title": "救命❗️男生这些穿搭雷区，真的很容易显“土”",
+      "target_comment_author": "L......",
+      "target_comment_excerpt": "想找一个女生帮买衣服",
+      "approved_draft": "其实简约风就很好看，不用追求太多花哧哧的单品，质感好就行。",
+      "layout_goal": "多图轮播帖子；平铺评论无嵌套；验证不需要展开线程",
+      "status": "new"
+    },
+    {
+      "id": "target-e-video-many-replies",
+      "keyword": "人活着不就是为了这几个moment吗",
+      "target_title": "人活着不就是为了这几个moment吗",
+      "target_comment_author": "一时",
+      "target_comment_excerpt": "粉蓝色调的天空太美了",
+      "approved_draft": "这个场景太治愈了，感谢分享，已经加进我的旅行清单了！",
+      "layout_goal": "视频帖子；置顶+大量回复；验证滚动和抩叠回复处理",
+      "status": "new"
+    }
+  ],
+  "selection_rules": [
+    "五连跑尽量使用五个不同目标；同一目标最多计一次，除非现场无法找到足够可验证评论。",
+    "至少覆盖：含图片楼层、较长评论、多评论列表、需要滚动的楼层、若可得则含折叠子回复附近的楼层。",
+    "目标只用于输入后清空演练，不点击发送。",
+    "每轮必须同时匹配作者和唯一评论前缀，不能只按作者定位。",
+    "run_iteration.py 从 targets 数组轮取，不再硬编码在 pipeline.json 中。"
+  ]
+}
