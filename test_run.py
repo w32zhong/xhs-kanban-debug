@@ -115,16 +115,59 @@ class SemanticGateTests(unittest.TestCase):
             "profile": "worker",
             "created": [
                 {"key": "scout", "id": "scout"},
+                {"key": "review-a", "id": "review-a"},
+                {"key": "review-b", "id": "review-b"},
                 {"key": "chair", "id": "chair"},
                 {"key": "publish-send", "id": "publish-send"},
                 {"key": "publish-verify", "id": "publish-verify"},
             ],
         }
 
+    def test_found_candidate_activates_both_reviewers(self) -> None:
+        tasks = [
+            {"id": "scout", "status": "done", "assignee": "worker"},
+            {"id": "review-a", "status": "ready", "assignee": None},
+            {"id": "review-b", "status": "ready", "assignee": None},
+            {"id": "chair", "status": "todo", "assignee": None},
+            {"id": "publish-send", "status": "todo", "assignee": None},
+            {"id": "publish-verify", "status": "todo", "assignee": None},
+        ]
+        activated: list[str] = []
+        with patch.object(run, "latest_run", return_value={"metadata": {"status": "FOUND"}}), patch.object(
+            run, "activate_waiting_task", side_effect=lambda _board, task_id, _profile: activated.append(task_id)
+        ), patch.object(run, "finish_without_worker"):
+            changed = run.apply_semantic_gates("xhs-run", self.state(), tasks)
+        self.assertTrue(changed)
+        self.assertEqual(activated, ["review-a", "review-b"])
+
+    def test_reviews_complete_activate_chair_even_when_they_request_revision(self) -> None:
+        tasks = [
+            {"id": "scout", "status": "done", "assignee": "worker"},
+            {"id": "review-a", "status": "done", "assignee": "worker"},
+            {"id": "review-b", "status": "done", "assignee": "worker"},
+            {"id": "chair", "status": "ready", "assignee": None},
+            {"id": "publish-send", "status": "todo", "assignee": None},
+            {"id": "publish-verify", "status": "todo", "assignee": None},
+        ]
+        runs = {
+            "scout": {"metadata": {"status": "FOUND"}},
+            "review-a": {"metadata": {"recommendation": "REVISE"}},
+            "review-b": {"metadata": {"recommendation": "PASS"}},
+        }
+        activated: list[str] = []
+        with patch.object(run, "latest_run", side_effect=lambda _board, task_id: runs[task_id]), patch.object(
+            run, "activate_waiting_task", side_effect=lambda _board, task_id, _profile: activated.append(task_id)
+        ), patch.object(run, "finish_without_worker"):
+            changed = run.apply_semantic_gates("xhs-run", self.state(), tasks)
+        self.assertTrue(changed)
+        self.assertEqual(activated, ["chair"])
+
     def test_no_candidate_finishes_all_downstream_without_workers(self) -> None:
         tasks = [
             {"id": "scout", "status": "done", "assignee": "worker"},
-            {"id": "chair", "status": "ready", "assignee": None},
+            {"id": "review-a", "status": "ready", "assignee": None},
+            {"id": "review-b", "status": "ready", "assignee": None},
+            {"id": "chair", "status": "todo", "assignee": None},
             {"id": "publish-send", "status": "todo", "assignee": None},
             {"id": "publish-verify", "status": "todo", "assignee": None},
         ]
@@ -134,34 +177,22 @@ class SemanticGateTests(unittest.TestCase):
         ), patch.object(run, "activate_waiting_task") as activate:
             changed = run.apply_semantic_gates("xhs-run", self.state(), tasks)
         self.assertTrue(changed)
-        self.assertEqual(skipped, ["chair", "publish-send", "publish-verify"])
+        self.assertEqual(skipped, ["review-a", "review-b", "chair", "publish-send", "publish-verify"])
         activate.assert_not_called()
-
-    def test_found_candidate_activates_only_chair(self) -> None:
-        tasks = [
-            {"id": "scout", "status": "done", "assignee": "worker"},
-            {"id": "chair", "status": "ready", "assignee": None},
-            {"id": "publish-send", "status": "todo", "assignee": None},
-            {"id": "publish-verify", "status": "todo", "assignee": None},
-        ]
-        activated: list[tuple[str, str]] = []
-        with patch.object(run, "latest_run", return_value={"metadata": {"status": "FOUND"}}), patch.object(
-            run, "activate_waiting_task", side_effect=lambda _board, task_id, profile: activated.append((task_id, profile))
-        ), patch.object(run, "finish_without_worker") as skip:
-            changed = run.apply_semantic_gates("xhs-run", self.state(), tasks)
-        self.assertTrue(changed)
-        self.assertEqual(activated, [("chair", "worker")])
-        skip.assert_not_called()
 
     def test_chair_reject_skips_publish_and_verifier(self) -> None:
         tasks = [
             {"id": "scout", "status": "done", "assignee": "worker"},
+            {"id": "review-a", "status": "done", "assignee": "worker"},
+            {"id": "review-b", "status": "done", "assignee": "worker"},
             {"id": "chair", "status": "done", "assignee": "worker"},
             {"id": "publish-send", "status": "ready", "assignee": None},
             {"id": "publish-verify", "status": "todo", "assignee": None},
         ]
         runs = {
             "scout": {"metadata": {"status": "FOUND"}},
+            "review-a": {"metadata": {"recommendation": "PASS"}},
+            "review-b": {"metadata": {"recommendation": "PASS"}},
             "chair": {"metadata": {"decision": "REJECT"}},
         }
         skipped: list[str] = []
@@ -175,12 +206,16 @@ class SemanticGateTests(unittest.TestCase):
     def test_send_success_activates_only_post_verifier(self) -> None:
         tasks = [
             {"id": "scout", "status": "done", "assignee": "worker"},
+            {"id": "review-a", "status": "done", "assignee": "worker"},
+            {"id": "review-b", "status": "done", "assignee": "worker"},
             {"id": "chair", "status": "done", "assignee": "worker"},
             {"id": "publish-send", "status": "done", "assignee": "worker"},
             {"id": "publish-verify", "status": "ready", "assignee": None},
         ]
         runs = {
             "scout": {"metadata": {"status": "FOUND"}},
+            "review-a": {"metadata": {"recommendation": "REVISE"}},
+            "review-b": {"metadata": {"recommendation": "PASS"}},
             "chair": {"metadata": {"decision": "APPROVE"}},
             "publish-send": {"metadata": {"status": "SEND_SUCCESS"}},
         }

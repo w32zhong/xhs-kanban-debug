@@ -1,5 +1,5 @@
 {
-  "stage": "fast-dynamic-e2e-v2",
+  "stage": "dynamic-e2e-quality-roundtable-v3",
   "board_prefix": "xhs-run",
   "workspace": ".",
   "default_assignee": "agent-6ef809b5bf450f39",
@@ -9,14 +9,16 @@
     "Codex任务断了怎么继续",
     "不会写代码 AI助手"
   ],
-  "max_parallel": 1,
+  "max_parallel": 2,
   "policy": {
     "candidate_max_age_days": 30,
-    "max_posts_checked": 3,
+    "max_posts_checked": 5,
     "unknown_account_is_warning": true,
     "require_exact_target_floor": true,
     "require_no_exact_duplicate_in_target_thread": true,
     "require_no_exact_duplicate_outside_target_thread": false,
+    "roundtable_default": "improve_and_pass",
+    "reject_only_severe": true,
     "vision_calls": 0
   },
   "tasks": [
@@ -31,19 +33,45 @@
       }
     },
     {
-      "key": "chair",
-      "name": "2️⃣ 快速定稿",
-      "prompt": "prompts/chair-worker.md",
-      "max_runtime": "3m",
+      "key": "review-a",
+      "name": "2A 圆桌·用户帮助",
+      "prompt": "prompts/review-worker.md",
+      "max_runtime": "4m",
       "parents": ["scout"],
       "body_vars": {
         "INPUT_FILE": "runtime/scout-result.json",
+        "REVIEWER_FOCUS": "接住具体焦虑、帮助价值、可执行性、自然口语",
+        "OUTPUT_FILE": "runtime/reviewer-a.json"
+      }
+    },
+    {
+      "key": "review-b",
+      "name": "2B 圆桌·表达优化",
+      "prompt": "prompts/review-worker.md",
+      "max_runtime": "4m",
+      "parents": ["scout"],
+      "body_vars": {
+        "INPUT_FILE": "runtime/scout-result.json",
+        "REVIEWER_FOCUS": "事实边界、零营销、安全、好奇心与互动意愿",
+        "OUTPUT_FILE": "runtime/reviewer-b.json"
+      }
+    },
+    {
+      "key": "chair",
+      "name": "3️⃣ 圆桌委员长定稿",
+      "prompt": "prompts/chair-worker.md",
+      "max_runtime": "4m",
+      "parents": ["review-a", "review-b"],
+      "body_vars": {
+        "SCOUT_FILE": "runtime/scout-result.json",
+        "REVIEW_A_FILE": "runtime/reviewer-a.json",
+        "REVIEW_B_FILE": "runtime/reviewer-b.json",
         "OUTPUT_FILE": "runtime/chair-decision.json"
       }
     },
     {
       "key": "publish-send",
-      "name": "3️⃣ 精确发布",
+      "name": "4️⃣ 精确发布",
       "prompt": "prompts/publish-send-worker.md",
       "max_runtime": "8m",
       "parents": ["chair"],
@@ -55,7 +83,7 @@
     },
     {
       "key": "publish-verify",
-      "name": "4️⃣ 发布复核",
+      "name": "5️⃣ 发布复核",
       "prompt": "prompts/publish-verify-worker.md",
       "max_runtime": "6m",
       "parents": ["publish-send"],

@@ -159,13 +159,7 @@ def apply_semantic_gates(
     state: dict[str, Any],
     tasks: list[dict[str, Any]],
 ) -> bool:
-    """Fail closed and launch only the next semantically approved stage.
-
-    Kanban dependencies only mean "the parent finished". Downstream cards are
-    deliberately created unassigned, so the dispatcher cannot race ahead of
-    this controller. A passing result assigns exactly the next card; a failing
-    result completes the rest as SKIPPED without starting more LLM workers.
-    """
+    """Launch the quality roundtable and keep irreversible actions gated."""
     created = state.get("created", [])
     key_to_id = {item.get("key"): item.get("id") for item in created}
     task_by_id = {task.get("id"): task for task in tasks}
@@ -178,36 +172,59 @@ def apply_semantic_gates(
             return None
         return _result_status(latest_run(board, task_id))
 
-    order = ["scout", "chair", "publish-send", "publish-verify"]
-    required = {
-        "scout": "FOUND",
-        "chair": "APPROVE",
-        "publish-send": "SEND_SUCCESS",
-    }
+    def activate(keys: list[str]) -> bool:
+        changed = False
+        for key in keys:
+            task_id = key_to_id.get(key)
+            task = task_by_id.get(task_id, {})
+            if task_id and task.get("status") in WAITING_STATUSES and not task.get("assignee"):
+                if not profile:
+                    raise RuntimeError("iteration state is missing worker profile")
+                activate_waiting_task(board, task_id, profile)
+                changed = True
+        return changed
 
-    changed = False
-    for index, key in enumerate(order[:-1]):
-        result_status = stage_status(key)
-        if result_status is None:
-            break
-        next_key = order[index + 1]
-        next_id = key_to_id.get(next_key)
-        if result_status != required[key]:
-            reason = f"{key} ended with {result_status}"
-            for downstream_key in order[index + 1:]:
-                task_id = key_to_id.get(downstream_key)
-                task = task_by_id.get(task_id, {})
-                if task_id and task.get("status") in WAITING_STATUSES:
-                    finish_without_worker(board, task_id, reason)
-                    changed = True
-            return changed
-        next_task = task_by_id.get(next_id, {})
-        if next_id and next_task.get("status") in WAITING_STATUSES and not next_task.get("assignee"):
-            if not profile:
-                raise RuntimeError("iteration state is missing worker profile")
-            activate_waiting_task(board, next_id, profile)
-            return True
-    return changed
+    def skip(keys: list[str], reason: str) -> bool:
+        changed = False
+        for key in keys:
+            task_id = key_to_id.get(key)
+            task = task_by_id.get(task_id, {})
+            if task_id and task.get("status") in WAITING_STATUSES:
+                finish_without_worker(board, task_id, reason)
+                changed = True
+        return changed
+
+    scout = stage_status("scout")
+    if scout is None:
+        return False
+    if scout != "FOUND":
+        return skip(["review-a", "review-b", "chair", "publish-send", "publish-verify"], f"scout ended with {scout}")
+
+    # Both reviewers run in parallel. Their job is to improve the answer; PASS,
+    # REVISE, and even a single REJECT all proceed to independent chair synthesis.
+    if activate(["review-a", "review-b"]):
+        return True
+    review_a = stage_status("review-a")
+    review_b = stage_status("review-b")
+    if review_a is None or review_b is None:
+        return False
+    if activate(["chair"]):
+        return True
+
+    chair = stage_status("chair")
+    if chair is None:
+        return False
+    if chair != "APPROVE":
+        return skip(["publish-send", "publish-verify"], f"chair ended with {chair}")
+    if activate(["publish-send"]):
+        return True
+
+    publish = stage_status("publish-send")
+    if publish is None:
+        return False
+    if publish != "SEND_SUCCESS":
+        return skip(["publish-verify"], f"publish-send ended with {publish}")
+    return activate(["publish-verify"])
 
 
 def wait_for_board(board: str, state: dict[str, Any], cfg: RunnerConfig) -> list[dict[str, Any]]:
