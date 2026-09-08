@@ -32,3 +32,9 @@ roundtable/e2e-*
 *~
 .DS_Store
 Thumbs.db
+
+# 圆桌输出 — 运行时生成，不是源码
+roundtable/reviewer-a.md
+roundtable/reviewer-b.md
+roundtable/chair-final.md
+roundtable/chair-decision.md
