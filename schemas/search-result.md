@@ -20,7 +20,7 @@ candidate:
   target_comment_date: <页面原文；无则 NONE>
   context: <目标评论为何体现需求，最多 3 句>
   thread_check: <展开了什么，以及是否明确看见我方回复；不确定必须写 UNCONFIRMED>
-  evidence_file: <截图绝对路径；无则 NONE>
+  evidence_file: NONE
 
 obstacles:
   - <实际阻碍；没有写 NONE>

@@ -58,6 +58,8 @@ def run(*args: str, json_output: bool = False) -> str | dict | list:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--target-id", help="Override publish rehearsal literals from publish-target-pool.json")
+    parser.add_argument("--finalize-input", help="Run deterministic finalize_run.py with this JSON input instead of creating a Kanban board")
+    parser.add_argument("--dry-run", action="store_true", help="Pass --dry-run to deterministic finalizer")
     cli = parser.parse_args()
 
     config = json.loads(json.dumps(CONFIG))
@@ -66,6 +68,14 @@ def main() -> None:
     if not os.path.isabs(ws):
         ws = str((ROOT / ws).resolve())
     config["workspace"] = ws
+    finalizer = config.get("finalizer")
+    if finalizer and finalizer.get("agent_required") is False:
+        if not cli.finalize_input:
+            raise SystemExit("pipeline.json uses a deterministic finalizer; pass --finalize-input <result.json>")
+        command = [sys.executable, str(ROOT / finalizer.get("script", "finalize_run.py")), "--input", cli.finalize_input]
+        if cli.dry_run:
+            command.append("--dry-run")
+        raise SystemExit(subprocess.run(command).returncode)
     selected_target = None
     if cli.target_id:
         pool = json.loads((ROOT / "publish-target-pool.json").read_text(encoding="utf-8"))

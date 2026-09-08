@@ -132,14 +132,4 @@ agent-browser snapshot -i -c
 
 ## 6. 完成
 
-保存一张最终证据截图：
-
-```bash
-source "<PARAM_FILE>"
-export AGENT_BROWSER_SOCKET_DIR=/tmp
-export AGENT_BROWSER_SESSION="$SESSION_NAME"
-export AGENT_BROWSER_PIN_TAB=1
-agent-browser screenshot "./evidence/$SESSION_NAME-candidate.png" --annotate
-```
-
-按 schema 生成简短报告，`posts_checked` 只能是 0 或 1。随后必须立即调用注入的 `kanban_complete`；不要只输出自然语言，不要研究完成工具实现。
+不保存像素截图；`evidence_file` 固定写 `NONE`。按 schema 生成简短报告，`posts_checked` 只能是 0 或 1。随后必须立即调用注入的 `kanban_complete`；不要只输出自然语言，不要研究完成工具实现。

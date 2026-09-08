@@ -21,7 +21,7 @@ exact_draft_found_outside_target_thread: YES | NO | UNKNOWN
 publisher_claim_used: NO
 content_modified: NO
 vision_calls: 0
-evidence_file: <绝对路径或 NONE>
+evidence_file: NONE
 obstacles:
   - <无则 NONE>
 ```
@@ -36,5 +36,5 @@ obstacles:
 - `WRONG_THREAD`：逐字定稿在页面其他楼层出现，但目标线程内没有。
 - `THREAD_UNCONFIRMED`：无法可靠确定子回复归属/展开状态，或目标线程仍有未展开回复。线程未穷尽时不得用 `REPLY_NOT_FOUND`。
 - 复核必须完全独立，`publisher_claim_used` 永远为 `NO`。
-- 禁止修改页面内容，`content_modified` 永远为 `NO`，`vision_calls` 永远为 `0`。
+- 禁止修改页面内容，`content_modified` 永远为 `NO`，`vision_calls` 永远为 `0`，`evidence_file` 永远为 `NONE`。
 - 完成后调用注入的 `kanban_complete`。

@@ -1,31 +1,28 @@
 {
-  "stage": "failure-coordination-v0.1",
+  "stage": "deterministic-finalize-v1",
   "workspace": ".",
-  "board_prefix": "xhs-debug-failure-coordination",
-  "max_parallel": 1,
-  "tasks": [
-    {
-      "key": "finalize",
-      "name": "协调与清理-Qwen",
-      "assignee": "agent-26c319b9362c7cec",
-      "prompt": "prompts/finalize-worker.md",
-      "max_runtime": "5m",
-      "param_vars": {
-        "PUBLISH_STATUS_LITERAL": "SEND_FAILED",
-        "VERIFY_STATUS_LITERAL": "THREAD_UNCONFIRMED",
-        "SEND_CLICKED_LITERAL": "YES",
-        "EDITOR_RESET_AFTER_SEND_LITERAL": "UNKNOWN",
-        "TARGET_CONTEXT_MATCH_LITERAL": "YES",
-        "THREAD_EXHAUSTED_LITERAL": "NO",
-        "EXACT_DRAFT_COUNT_LITERAL": "UNKNOWN",
-        "EXACT_DRAFT_OUTSIDE_TARGET_LITERAL": "UNKNOWN",
-        "CONTENT_MODIFIED_LITERAL": "NO",
-        "RUN_PREFIX_LITERAL": "xhs-example-",
-        "ARCHIVE_BOARD_LITERAL": "NO"
-      },
-      "body_vars": {
-        "SCENARIO_ID": "finalize-example"
-      }
+  "browser_policy": {
+    "vision_calls_per_business_run": 0,
+    "pixel_screenshots_per_business_run": 0,
+    "evidence": "fresh snapshot + agent-browser read",
+    "on_missing_critical_evidence": "fail_closed"
+  },
+  "finalizer": {
+    "script": "finalize_run.py",
+    "agent_required": false,
+    "input_format": "JSON",
+    "example_input": {
+      "PUBLISH_STATUS_LITERAL": "SEND_SUCCESS",
+      "VERIFY_STATUS_LITERAL": "VERIFIED",
+      "SEND_CLICKED_LITERAL": "YES",
+      "EDITOR_RESET_AFTER_SEND_LITERAL": "YES",
+      "TARGET_CONTEXT_MATCH_LITERAL": "YES",
+      "THREAD_EXHAUSTED_LITERAL": "YES",
+      "EXACT_DRAFT_COUNT_LITERAL": "1",
+      "EXACT_DRAFT_OUTSIDE_TARGET_LITERAL": "NO",
+      "CONTENT_MODIFIED_LITERAL": "NO",
+      "RUN_PREFIX_LITERAL": "xhs-example-",
+      "ARCHIVE_BOARD_LITERAL": "NO"
     }
-  ]
+  }
 }

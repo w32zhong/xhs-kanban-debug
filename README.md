@@ -14,8 +14,11 @@ cd /path/to/xhs-kanban-workflow
 # 2. 确保 Hermes profile 的 worker 模型已配置（默认 agent-26c319b9362c7cec）
 hermes profile list
 
-# 3. 运行单阶段调试（pipeline.json 中 workspace 会自动解析为当前目录）
-python3 run_iteration.py
+# 3. 当前 pipeline 使用确定性收尾器；用发布+复核的结构化 JSON 调用
+python3 run_iteration.py --finalize-input runtime-params/<run>-finalize.json
+
+# 只预览裁定与清理目标，不修改文件或标签页
+python3 run_iteration.py --finalize-input runtime-params/<run>-finalize.json --dry-run
 
 # 4. 或按 README 下方"全链路 E2E"章节手动创建看板
 ```
@@ -29,12 +32,12 @@ python3 run_iteration.py
 
 当前按用户要求**只使用 Qwen 小虾**，暂不使用 Mimo。继续使用本地 prompt、schema 和参数文件机制，从全新 board/task/session/context 执行并观测流程；发现可泛化问题即修订本地文档并整板重跑。
 
-## 全链路 E2E 端到端流程（7 阶段）
+## 全链路 E2E 流程（6 个 LLM 阶段 + 1 个确定性收尾脚本）
 
 ### 任务依赖图
 
 ```
-1️⃣ 搜索 ──→ 2️⃣ 独立验证 ──→ 3A 圆桌委员A ──→ 4️⃣ 委员长 ──→ 5️⃣ 发布 ──→ 6️⃣ 发布后复核 ──→ 7️⃣ 协调与清理
+1️⃣ 搜索 ──→ 2️⃣ 独立验证 ──→ 3A 圆桌委员A ──→ 4️⃣ 委员长 ──→ 5️⃣ 发布 ──→ 6️⃣ 发布后复核 ──→ finalize_run.py
                                               ↘ 3B 圆桌委员B ↗
 ```
 
@@ -88,7 +91,8 @@ hermes kanban --board "$BOARD" create "5️⃣ 发布" \
   --parent <委员长_id> --initial-status blocked \
   --body "第一步读取：prompts/publish-send-worker.md\nPARAM_FILE: runtime-params/xxx-send.sh" ...
 
-# 6️⃣ 发布后复核 → 7️⃣ 协调与清理（一个收尾 worker）
+# 6️⃣ 发布后复核完成后，运行确定性收尾脚本（不启动 LLM worker）
+# python3 finalize_run.py --input runtime-params/<run>-finalize.json
 
 # 4. Dispatch 首批（只 spawn ready 的，即搜索卡）
 hermes kanban --board "$BOARD" dispatch --max 1 --json
@@ -119,7 +123,7 @@ Dispatcher 会在父任务完成后自动推进 blocked 子任务，无需手动
 | 4 | 委员长 | ✅ APPROVE，采纳委员 A 稿 | ~1.5min |
 | 5 | 发布 | ✅ `SEND_SUCCESS`，定稿逐字输入并发送到正确楼层 | ~8.5min |
 | 6 | 发布后复核 | ✅ `VERIFIED`，正确线程内定稿恰好出现 1 次 | ~4.5min |
-| 7 | 协调与清理 | ✅ `NO_ACTION`；清理临时文件、冗余标签和完成后的看板 | ~2min |
+| 收尾 | `finalize_run.py` | ✅ 确定性 `NO_ACTION`；清理本轮文件与冗余标签 | 无 LLM |
 
 **候选**: 帖子「codex 总是还没完成任务就自动结束怎么办」→ 评论「哎我也是没招了」（Kiki 总裁）
 
@@ -137,7 +141,8 @@ Dispatcher 会在父任务完成后自动推进 blocked 子任务，无需手动
 
 1. **点击帖子标题会打开新标签页**：详情页在新 tab 中生成，需要 `agent-browser tab list --json` + `agent-browser tab tN` 切换。
 2. **不要在 worker 运行期间清理标签页**：会导致 CDP 连接断开，引发 `SETUP_ERROR`。
-3. **收尾卡必须接收运行时结构化结果**：创建或放行第 7 阶段前，将发布与复核结果写入 `PARAM_FILE`；不要保留 `PENDING` 静态占位，否则只能保守裁定。
+3. **确定性收尾脚本必须接收运行时结构化结果**：将发布与复核 metadata 写入 JSON，再运行 `python3 finalize_run.py --input <json>`；不要保留 `PENDING` 静态占位。
+4. **浏览器业务阶段固定零 Vision、零常规像素截图**：搜索、独立验证、发布和发布后复核只使用 fresh snapshot + `agent-browser read`。任何关键字段不明确都 fail-closed，不通过 Vision 猜测来解锁发送。
 
 ## 可复现约束
 
@@ -151,7 +156,7 @@ Dispatcher 会在父任务完成后自动推进 blocked 子任务，无需手动
 
 ## 文件说明
 
-### Prompts（7 个）
+### Prompts（6 个业务 worker）
 
 - `prompts/search-worker.md`：搜索 worker（含 `agent-browser read`）。
 - `prompts/verify-worker.md`：独立验证 worker（含 `agent-browser read` 优先）。
@@ -159,15 +164,16 @@ Dispatcher 会在父任务完成后自动推进 blocked 子任务，无需手动
 - `prompts/chair-worker.md`：委员长 worker（纯文本，综合裁定）。
 - `prompts/publish-send-worker.md`：发布 worker（搜索→定位→绑定→输入→发送，一步完成）。
 - `prompts/publish-verify-worker.md`：发布后独立复核。
-- `prompts/finalize-worker.md`：协调与清理合并 worker；先裁定，再按本轮前缀删除临时文件、关闭非 Kanban UI 标签。
 
-### Schemas（7 个）
+### Schemas（6 个）
 
-- `schemas/search-result.md`、`schemas/verify-result.md`、`schemas/review-result.md`、`schemas/chair-result.md`、`schemas/publish-send-result.md`、`schemas/publish-verify-result.md`、`schemas/finalize-result.md`
+- `schemas/search-result.md`、`schemas/verify-result.md`、`schemas/review-result.md`、`schemas/chair-result.md`、`schemas/publish-send-result.md`、`schemas/publish-verify-result.md`
 
 ### 工具与配置
 
 - `pipeline.json`：当前调试阶段的任务图和参数。
+- `finalize_run.py`：确定性协调与清理，不调用 LLM；严格决策表、前缀限定文件清理、保留 Kanban UI 和一个小红书登录态标签。
+- `test_finalize_run.py`：收尾决策表和安全前缀回归测试。
 - `run_iteration.py`：新建一轮 board、创建任务并立即 dispatch。
 - `watch_run.py`：持续收集当前轮任务状态和 worker 日志。
 - `resource_guard.py`：浏览器标签页数量守卫。

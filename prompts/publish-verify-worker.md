@@ -117,17 +117,9 @@ agent-browser snapshot -i -c
 - 定稿出现在页面其他评论楼层、但不在目标线程：`WRONG_THREAD`
 - 线程未穷尽、看见疑似回复但无法确定线程边界、或达到展开上限：`THREAD_UNCONFIRMED`
 
-## V5：证据与完成
+## V5：完成
 
-保存一张最终截图到绝对路径：
-
-```bash
-agent-browser screenshot "./evidence/$SESSION_NAME-publish-verify.png"
-```
-
-截图命令成功即视为保存成功；禁止 stat/ls/file/hash/图片加工。
-
-按 schema 输出并调用注入的 `kanban_complete`。
+不保存像素截图；`evidence_file` 固定写 `NONE`。按 schema 输出并调用注入的 `kanban_complete`。
 
 安全红线：
 
