@@ -8,8 +8,8 @@
 
 ```bash
 # 1. 克隆到你想要的位置
-git clone <repo-url> /path/to/xhs-kanban-debug
-cd /path/to/xhs-kanban-debug
+git clone <repo-url> /path/to/xhs-kanban-workflow
+cd /path/to/xhs-kanban-workflow
 
 # 2. 确保 Hermes profile 的 worker 模型已配置（默认 agent-26c319b9362c7cec）
 hermes profile list
@@ -17,7 +17,7 @@ hermes profile list
 # 3. 运行单阶段调试（pipeline.json 中 workspace 会自动解析为当前目录）
 python3 run_iteration.py
 
-# 4. 或按 README 下方"全链路 E2E"章节手动创建9阶段看板
+# 4. 或按 README 下方"全链路 E2E"章节手动创建看板
 ```
 
 所有 prompt 文件使用相对路径（`./prompts/...`、`./schemas/...`），Kanban worker 的 cwd 自动设为 workspace 目录。
@@ -25,28 +25,22 @@ python3 run_iteration.py
 
 ## 当前阶段
 
-采用 bottom-up 调试。搜索、独立验证、综合圆桌/委员长、发布输入/清空演练、真实发送、发布后独立复核和失败协调均已完成有界实跑。
+采用 bottom-up 调试。搜索、独立验证、综合圆桌/委员长、发布后独立复核和失败协调均已完成有界实跑。
 
-当前按用户要求**只使用 Qwen 小虾**，暂不使用 Mimo。继续使用本地 prompt、schema 和参数文件机制，从全新 board/task/session/context 执行并观测流程；发现可泛化问题即修订本地文档并整板重跑。真实发送已在三个不同目标上连续通过；发布后独立复核也在最终提示词版本下对三个不同目标连续通过。失败协调已覆盖错发、重复、发送前安全退出和发送结果不明确四类裁定，协调员本身始终零浏览器调用、零内容修改。
+当前按用户要求**只使用 Qwen 小虾**，暂不使用 Mimo。继续使用本地 prompt、schema 和参数文件机制，从全新 board/task/session/context 执行并观测流程；发现可泛化问题即修订本地文档并整板重跑。
 
-**首次全链路 E2E（20260908）已完成 9/9 阶段**，详情见下方。
-
-## 角色边界
-
-- 当前聊天中的打钳是**独立流程调试者**，不属于看板任务图，不参与圆桌裁定。
-- 完整流程中的"委员长"必须是看板内单独创建的 worker/session，使用与打钳同款的可靠模型；它负责每轮综合裁定与最终定稿。
-- 调试阶段尚未运行到资源清理卡时，由独立调试者手动清理废弃标签、session 和 board，浏览器标签始终保持少于 10 个。
-- 完整流程稳定后，最后的独立复核/清理角色负责正常收尾；调试者只负责观察、诊断和改进流程。
-
-## 全链路 E2E 端到端流程（9 阶段）
+## 全链路 E2E 端到端流程（8 阶段）
 
 ### 任务依赖图
 
 ```
-1️⃣ 搜索 ──→ 2️⃣ 独立验证 ──→ 3A 圆桌委员A ──→ 4️⃣ 委员长 ──→ 5️⃣ 发布绑定 ──→ 6️⃣ 输入演练 ──→ 7️⃣ 真实发送 ──→ 8️⃣ 发布后复核 ──→ 9️⃣ 失败协调 ──→ 🔟 清理
-                                             ↘ 3B 圆桌委员B ↗
+1️⃣ 搜索 ──→ 2️⃣ 独立验证 ──→ 3A 圆桌委员A ──→ 4️⃣ 委员长 ──→ 5️⃣ 发布 ──→ 6️⃣ 发布后复核 ──→ 7️⃣ 失败协调 ──→ 8️⃣ 清理
+                                              ↘ 3B 圆桌委员B ↗
 ```
-每个下游任务通过 `--parent` 依赖上游，创建时设 `--initial-status blocked`。Dispatcher 在父任务完成后自动推进（promote）子任务为 ready 并 spawn worker。最后的清理工负责清理所有运行时临时文件和浏览器标签页。
+
+每个下游任务通过 `--parent` 依赖上游，创建时设 `--initial-status blocked`。Dispatcher 在父任务完成后自动推进（promote）子任务为 ready 并 spawn worker。
+
+**发布阶段**（第 5 阶段）一步完成：搜索目标帖 → 定位目标评论 → 绑定回复 → 输入定稿 → 点击发送。无演练、无中间步骤。
 
 ### 创建步骤
 
@@ -89,17 +83,13 @@ hermes kanban --board "$BOARD" create "3A 委员A" \
 hermes kanban --board "$BOARD" create "4️⃣ 委员长" \
   --parent <3A_id> --parent <3B_id> --initial-status blocked ...
 
-# 后续 5-9 逐级 --parent 上游
-#
-# 10. 清理工（最后一个）
-hermes kanban --board "$BOARD" create "🔟 清理" \
-  --body "第一步读取：prompts/cleanup-worker.md\nARCHIVE_BOARD=YES" \
-  --parent <失败协调task_id> --initial-status blocked \
-  --assignee agent-26c319b9362c7cec --workspace "dir:$(pwd)" \
-  --max-runtime 5m --max-retries 1
-```
+# 5️⃣ 发布（一步完成：搜索→定位→绑定→输入→发送）
+hermes kanban --board "$BOARD" create "5️⃣ 发布" \
+  --parent <委员长_id> --initial-status blocked \
+  --body "第一步读取：prompts/publish-send-worker.md\nPARAM_FILE: runtime-params/xxx-send.sh" ...
 
-```bash
+# 6️⃣ 发布后复核 → 7️⃣ 失败协调 → 8️⃣ 清理（逐级 --parent 上游）
+
 # 4. Dispatch 首批（只 spawn ready 的，即搜索卡）
 hermes kanban --board "$BOARD" dispatch --max 1 --json
 ```
@@ -127,11 +117,10 @@ Dispatcher 会在父任务完成后自动推进 blocked 子任务，无需手动
 | 3A | 圆桌委员A | ✅ PASS，47 字定稿 | ~2min |
 | 3B | 圆桌委员B | ✅ PASS，附账号门禁警告 | ~2min |
 | 4 | 委员长 | ✅ APPROVE，采纳委员 A 稿 | ~1.5min |
-| 5 | 发布绑定 | ✅ `READY_TO_PUBLISH`，vision 确认回复对象 | ~4min |
-| 6 | 输入/清空演练 | ✅ `INPUT_PATH_READY`，`TEXT_EXACT=YES` | ~5min |
-| 7 | 真实发送 | ⚠️ `SETUP_ERROR`（CDP 连接不稳定） | 12min |
-| 8 | 发布后复核 | ✅ `REPLY_NOT_FOUND`（正确：未发送） | ~2min |
-| 9 | 失败协调 | ✅ `ESCALATE_MANUAL`（保守裁定） | ~2min |
+| 5 | 发布 | ⚠️ `SETUP_ERROR`（CDP 连接不稳定） | 12min |
+| 6 | 发布后复核 | ✅ `REPLY_NOT_FOUND`（正确：未发送） | ~2min |
+| 7 | 失败协调 | ✅ `ESCALATE_MANUAL`（保守裁定） | ~2min |
+| 8 | 清理 | ✅ 删除临时文件、关闭标签页、归档看板 | ~1min |
 
 **候选**: 帖子「codex 总是还没完成任务就自动结束怎么办」→ 评论「哎我也是没招了」（Kiki 总裁）
 
@@ -163,23 +152,28 @@ Dispatcher 会在父任务完成后自动推进 blocked 子任务，无需手动
 
 ## 文件说明
 
-- `highclaws-features.md`：临时小助手重新研究官网后生成的产品事实摘要。
-- `prompts/search-worker.md`：搜索 worker 的逐步执行手册（含 `agent-browser read`）。
+### Prompts（8 个）
+
+- `prompts/search-worker.md`：搜索 worker（含 `agent-browser read`）。
 - `prompts/verify-worker.md`：独立验证 worker（含 `agent-browser read` 优先）。
 - `prompts/review-worker.md`：圆桌委员 worker（纯文本，无浏览器）。
 - `prompts/chair-worker.md`：委员长 worker（纯文本，综合裁定）。
-- `prompts/publish-rehearsal-worker.md`：发布回复绑定演练（不输入不发送）。
-- `prompts/publish-input-rehearsal-worker.md`：发布输入/清空演练（不发送）。
-- `prompts/publish-send-worker.md`：真实发送状态机。
+- `prompts/publish-send-worker.md`：发布 worker（搜索→定位→绑定→输入→发送，一步完成）。
 - `prompts/publish-verify-worker.md`：发布后独立复核。
 - `prompts/failure-coordinator.md`：无副作用失败协调决策表。
-- `prompts/cleanup-worker.md`：E2E 完成后的清理工（删临时文件、关标签、归档看板）。
-- `schemas/*.md`：各阶段固定交付格式。
-- `publish-target-pool.json`：发布泛化测试目标池（5 个不同布局目标）。
+- `prompts/cleanup-worker.md`：清理工（删临时文件、关标签、归档看板）。
+
+### Schemas（7 个）
+
+- `schemas/search-result.md`、`schemas/verify-result.md`、`schemas/review-result.md`、`schemas/chair-result.md`、`schemas/publish-send-result.md`、`schemas/publish-verify-result.md`、`schemas/failure-result.md`
+
+### 工具与配置
+
 - `pipeline.json`：当前调试阶段的任务图和参数。
 - `run_iteration.py`：新建一轮 board、创建任务并立即 dispatch。
-- 发布泛化测试必须显式选择目标：`python3 run_iteration.py --target-id <publish-target-pool.json 中的 id>`。禁止连续五轮静默复用 `pipeline.json` 的同一目标；`current-run.json` 会记录本轮 `target_id`。
-- `watch_run.py`：持续收集当前轮任务状态和 worker 日志；watcher 是长驻采集器，任务完成后由调试者主动停止并清理临时看板。
-- `CHANGELOG.md`：每次流程修订及证据。
-- `roundtable/reviewer-a.md`、`roundtable/reviewer-b.md`、`roundtable/chair-final.md`：最新一轮圆桌产出。
+- `watch_run.py`：持续收集当前轮任务状态和 worker 日志。
+- `resource_guard.py`：浏览器标签页数量守卫。
+- `publish-target-pool.json`：发布泛化测试目标池（5 个不同布局目标）。
 - `review-case.md`：圆桌输入样例（可由搜索阶段实时更新）。
+- `highclaws-features.md`：产品事实摘要。
+- `CHANGELOG.md`：每次流程修订及证据。
