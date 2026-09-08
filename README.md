@@ -43,11 +43,10 @@ python3 run_iteration.py
 ### 任务依赖图
 
 ```
-1️⃣ 搜索 ──→ 2️⃣ 独立验证 ──→ 3A 圆桌委员A ──→ 4️⃣ 委员长 ──→ 5️⃣ 发布绑定 ──→ 6️⃣ 输入演练 ──→ 7️⃣ 真实发送 ──→ 8️⃣ 发布后复核 ──→ 9️⃣ 失败协调
-                                              ↘ 3B 圆桌委员B ↗
+1️⃣ 搜索 ──→ 2️⃣ 独立验证 ──→ 3A 圆桌委员A ──→ 4️⃣ 委员长 ──→ 5️⃣ 发布绑定 ──→ 6️⃣ 输入演练 ──→ 7️⃣ 真实发送 ──→ 8️⃣ 发布后复核 ──→ 9️⃣ 失败协调 ──→ 🔟 清理
+                                             ↘ 3B 圆桌委员B ↗
 ```
-
-每个下游任务通过 `--parent` 依赖上游，创建时设 `--initial-status blocked`。Dispatcher 在父任务完成后自动推进（promote）子任务为 ready 并 spawn worker。
+每个下游任务通过 `--parent` 依赖上游，创建时设 `--initial-status blocked`。Dispatcher 在父任务完成后自动推进（promote）子任务为 ready 并 spawn worker。最后的清理工负责清理所有运行时临时文件和浏览器标签页。
 
 ### 创建步骤
 
@@ -91,6 +90,13 @@ hermes kanban --board "$BOARD" create "4️⃣ 委员长" \
   --parent <3A_id> --parent <3B_id> --initial-status blocked ...
 
 # 后续 5-9 逐级 --parent 上游
+#
+# 10. 清理工（最后一个）
+hermes kanban --board "$BOARD" create "🔟 清理" \
+  --body "第一步读取：prompts/cleanup-worker.md\nARCHIVE_BOARD=YES" \
+  --parent <失败协调task_id> --initial-status blocked \
+  --assignee agent-26c319b9362c7cec --workspace "dir:$(pwd)" \
+  --max-runtime 5m --max-retries 1
 ```
 
 ```bash
@@ -167,6 +173,7 @@ Dispatcher 会在父任务完成后自动推进 blocked 子任务，无需手动
 - `prompts/publish-send-worker.md`：真实发送状态机。
 - `prompts/publish-verify-worker.md`：发布后独立复核。
 - `prompts/failure-coordinator.md`：无副作用失败协调决策表。
+- `prompts/cleanup-worker.md`：E2E 完成后的清理工（删临时文件、关标签、归档看板）。
 - `schemas/*.md`：各阶段固定交付格式。
 - `publish-target-pool.json`：发布泛化测试目标池（5 个不同布局目标）。
 - `pipeline.json`：当前调试阶段的任务图和参数。
