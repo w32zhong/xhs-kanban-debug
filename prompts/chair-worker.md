@@ -4,12 +4,12 @@
 
 只读取以下精确路径：
 
-1. `/worktrees/folder-1/xhs-kanban-debug/review-case.md`
-2. `/worktrees/folder-1/xhs-kanban-debug/highclaws-features.md`
-3. `/worktrees/folder-1/xhs-kanban-debug/roundtable/reviewer-a.md`
-4. `/worktrees/folder-1/xhs-kanban-debug/roundtable/reviewer-b.md`
-5. `/worktrees/folder-1/xhs-kanban-debug/schemas/chair-result.md`
-6. `/worktrees/folder-1/xhs-kanban-debug/roundtable-angles.md`
+1. `./review-case.md`
+2. `./highclaws-features.md`
+3. `./roundtable/reviewer-a.md`
+4. `./roundtable/reviewer-b.md`
+5. `./schemas/chair-result.md`
+6. `./roundtable-angles.md`
 7. 任务正文中的 `OUTPUT_FILE`
 
 不存在 `value-review.md`、`risk-review.md` 或其他别名；禁止尝试这些猜测路径。不要先调用 Hermes Kanban CLI 查任务；dispatcher 已提供任务正文。完成必须使用注入的 `kanban_complete` 工具，不调用 shell CLI。

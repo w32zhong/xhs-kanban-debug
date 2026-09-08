@@ -1,6 +1,6 @@
 {
   "stage": "failure-coordination-v0.1",
-  "workspace": "/worktrees/folder-1/xhs-kanban-debug",
+  "workspace": ".",
   "board_prefix": "xhs-debug-failure-coordination",
   "max_parallel": 1,
   "tasks": [

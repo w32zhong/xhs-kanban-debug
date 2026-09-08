@@ -14,11 +14,11 @@
 
 ## 产品事实边界
 
-参考 `/worktrees/folder-1/xhs-kanban-debug/highclaws-features.md`。HighClaws 面向非技术用户，提供全天候云端沙箱、长期任务、文件与记忆持久化、浏览器和即时通讯接入。
+参考 `./highclaws-features.md`。HighClaws 面向非技术用户，提供全天候云端沙箱、长期任务、文件与记忆持久化、浏览器和即时通讯接入。
 
 ## 回复硬约束
 
-完整评审角度与自动拒绝门槛见 `/worktrees/folder-1/xhs-kanban-debug/roundtable-angles.md`，委员与委员长必须在一轮内综合使用。
+完整评审角度与自动拒绝门槛见 `./roundtable-angles.md`，委员与委员长必须在一轮内综合使用。
 
 - 目标是自然帮助和引起进一步交流兴趣，不做公开营销。
 - 不得出现产品名称、产品 URL、价格、套餐、购买、注册、私信我等直接引流表达。

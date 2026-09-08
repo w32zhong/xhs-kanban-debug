@@ -2,6 +2,27 @@
 
 目标：把小红书线索发现、独立验证、圆桌起草、发布与复核流程调试成可由较小模型稳定执行的流程。
 
+## 新环境配置
+
+本项目不含硬编码路径。克隆到任意目录即可使用：
+
+```bash
+# 1. 克隆到你想要的位置
+git clone <repo-url> /path/to/xhs-kanban-debug
+cd /path/to/xhs-kanban-debug
+
+# 2. 确保 Hermes profile 的 worker 模型已配置（默认 agent-26c319b9362c7cec）
+hermes profile list
+
+# 3. 运行单阶段调试（pipeline.json 中 workspace 会自动解析为当前目录）
+python3 run_iteration.py
+
+# 4. 或按 README 下方"全链路 E2E"章节手动创建9阶段看板
+```
+
+所有 prompt 文件使用相对路径（`./prompts/...`、`./schemas/...`），Kanban worker 的 cwd 自动设为 workspace 目录。
+
+
 ## 当前阶段
 
 采用 bottom-up 调试。搜索、独立验证、综合圆桌/委员长、发布输入/清空演练、真实发送、发布后独立复核和失败协调均已完成有界实跑。
@@ -35,7 +56,7 @@
 STAMP=$(date +%Y%m%d-%H%M%S)
 BOARD="xhs-e2e-full-${STAMP}"
 hermes kanban boards create "$BOARD" --name "小红书完整E2E·${STAMP}"
-hermes kanban boards set-default-workdir "$BOARD" /worktrees/folder-1/xhs-kanban-debug
+hermes kanban boards set-default-workdir "$BOARD" "$(pwd)"
 hermes kanban boards switch "$BOARD"
 ```
 
@@ -54,7 +75,7 @@ APPROVED_DRAFT_LITERAL='...'
 # 3. 逐级创建任务（--parent 依赖 + --initial-status blocked）
 hermes kanban --board "$BOARD" create "1️⃣ 搜索" \
   --body "第一步读取：prompts/search-worker.md\nPARAM_FILE: runtime-params/xxx-search.sh" \
-  --assignee agent-26c319b9362c7cec --workspace dir:/worktrees/folder-1/xhs-kanban-debug \
+  --assignee agent-26c319b9362c7cec --workspace "dir:$(pwd)" \
   --max-runtime 12m --max-retries 1
 
 hermes kanban --board "$BOARD" create "2️⃣ 独立验证" \

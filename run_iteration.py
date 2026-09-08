@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import argparse
+import os
 import shlex
 import subprocess
 import sys
@@ -60,6 +61,11 @@ def main() -> None:
     cli = parser.parse_args()
 
     config = json.loads(json.dumps(CONFIG))
+    # Resolve workspace path relative to project root
+    ws = config.get("workspace", ".")
+    if not os.path.isabs(ws):
+        ws = str((ROOT / ws).resolve())
+    config["workspace"] = ws
     selected_target = None
     if cli.target_id:
         pool = json.loads((ROOT / "publish-target-pool.json").read_text(encoding="utf-8"))

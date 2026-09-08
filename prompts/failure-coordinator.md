@@ -5,7 +5,7 @@
 只读取：
 
 1. 本文件；
-2. `/worktrees/folder-1/xhs-kanban-debug/schemas/failure-result.md`；
+2. `./schemas/failure-result.md`；
 3. 任务正文指定的 `PARAM_FILE`。
 
 基础 `kanban_show` 后直接执行。禁止读取 README、CHANGELOG、旧日志、旧证据、Kanban DB、源码或额外 Skill；禁止浏览器、Vision、git、环境探索、网络、SQLite、临时脚本和自行查询上游任务。

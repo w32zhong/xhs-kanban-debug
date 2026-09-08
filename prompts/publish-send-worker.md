@@ -5,7 +5,7 @@
 只读取：
 
 1. 本文件；
-2. `/worktrees/folder-1/xhs-kanban-debug/schemas/publish-send-result.md`；
+2. `./schemas/publish-send-result.md`；
 3. 任务正文指定的 `PARAM_FILE`。
 
 不要读取 README、CHANGELOG、旧日志、Kanban DB、源码、圆桌文件或额外 Skill。基础 `kanban_show` 后直接执行。
@@ -179,7 +179,7 @@ agent-browser snapshot -i -c
 
 1. 重新 snapshot，检查编辑器是否已被清空或重置（发送成功的强信号）；
 2. `get url` 确认页面未发生导航；
-3. 保存发送后截图到绝对路径 `/worktrees/folder-1/xhs-kanban-debug/evidence/$SESSION_NAME-after-send.png`。`agent-browser screenshot` 成功返回即视为写入成功；禁止再用 `stat`、`ls`、`file`、哈希或图片处理命令验证截图文件。
+3. 保存发送后截图到绝对路径 `./evidence/$SESSION_NAME-after-send.png`。`agent-browser screenshot` 成功返回即视为写入成功；禁止再用 `stat`、`ls`、`file`、哈希或图片处理命令验证截图文件。
 
 发送后**禁止**：
 - 再次输入任何文字；

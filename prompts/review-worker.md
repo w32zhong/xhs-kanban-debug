@@ -4,10 +4,10 @@
 
 只读取：
 
-1. `/worktrees/folder-1/xhs-kanban-debug/review-case.md`
-2. `/worktrees/folder-1/xhs-kanban-debug/highclaws-features.md`
-3. `/worktrees/folder-1/xhs-kanban-debug/schemas/review-result.md`
-4. `/worktrees/folder-1/xhs-kanban-debug/roundtable-angles.md`
+1. `./review-case.md`
+2. `./highclaws-features.md`
+3. `./schemas/review-result.md`
+4. `./roundtable-angles.md`
 5. 任务正文中的 `REVIEWER_FOCUS` 与 `OUTPUT_FILE`
 
 禁止读取 README、CHANGELOG、其他任务日志、Kanban DB、源码或额外 Skill。基础 `kanban_show` 后直接评审。

@@ -7,7 +7,7 @@
 只读取：
 
 1. 本文件；
-2. `/worktrees/folder-1/xhs-kanban-debug/schemas/verify-result.md`；
+2. `./schemas/verify-result.md`；
 3. 任务正文指定的 `PARAM_FILE`。
 
 不要读取搜索任务日志、旧证据、README、CHANGELOG、Kanban DB、源码或额外 Skill。基础 `kanban_show` 后直接执行。
@@ -120,7 +120,7 @@ source "<PARAM_FILE>"
 export AGENT_BROWSER_SOCKET_DIR=/tmp
 export AGENT_BROWSER_SESSION="$SESSION_NAME"
 export AGENT_BROWSER_PIN_TAB=1
-agent-browser screenshot "/worktrees/folder-1/xhs-kanban-debug/evidence/$SESSION_NAME-verify.png" --annotate
+agent-browser screenshot "./evidence/$SESSION_NAME-verify.png" --annotate
 ```
 
 按 schema 输出，随后立即调用注入的 `kanban_complete`。任何状态都必须完成任务，不要研究完成工具。

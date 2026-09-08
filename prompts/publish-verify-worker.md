@@ -5,7 +5,7 @@
 只读取：
 
 1. 本文件；
-2. `/worktrees/folder-1/xhs-kanban-debug/schemas/publish-verify-result.md`；
+2. `./schemas/publish-verify-result.md`；
 3. 任务正文指定的 `PARAM_FILE`。
 
 不要读取 publisher 日志、旧证据、README、CHANGELOG、Kanban DB、源码或额外 Skill。基础 `kanban_show` 后直接执行。
@@ -122,7 +122,7 @@ agent-browser snapshot -i -c
 保存一张最终截图到绝对路径：
 
 ```bash
-agent-browser screenshot "/worktrees/folder-1/xhs-kanban-debug/evidence/$SESSION_NAME-publish-verify.png"
+agent-browser screenshot "./evidence/$SESSION_NAME-publish-verify.png"
 ```
 
 截图命令成功即视为保存成功；禁止 stat/ls/file/hash/图片加工。

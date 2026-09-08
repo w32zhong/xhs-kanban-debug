@@ -5,7 +5,7 @@
 这是一张发布机械路径演练卡，不发布业务结果。只读取：
 
 1. 本文件；
-2. `/worktrees/folder-1/xhs-kanban-debug/schemas/publish-rehearsal-result.md`；
+2. `./schemas/publish-rehearsal-result.md`；
 3. 任务正文指定的 `PARAM_FILE`。
 
 不要读取 README、CHANGELOG、旧任务日志、Kanban DB、源码、圆桌意见或额外 Skill。基础 `kanban_show` 后直接执行。
@@ -115,7 +115,7 @@ source "<PARAM_FILE>"
 export AGENT_BROWSER_SOCKET_DIR=/tmp
 export AGENT_BROWSER_SESSION="$SESSION_NAME"
 export AGENT_BROWSER_PIN_TAB=1
-agent-browser screenshot "/worktrees/folder-1/xhs-kanban-debug/evidence/$SESSION_NAME-reply-context.png" --annotate
+agent-browser screenshot "./evidence/$SESSION_NAME-reply-context.png" --annotate
 ```
 
 Vision 只回答：底部编辑器是否逐字显示“回复 <目标作者>”，编辑器是否为空，发送按钮是否 disabled，是否有“取消”。禁止读取或推断其他业务信息，禁止第二张截图和 vision 重试。
@@ -144,7 +144,7 @@ source "<PARAM_FILE>"
 export AGENT_BROWSER_SOCKET_DIR=/tmp
 export AGENT_BROWSER_SESSION="$SESSION_NAME"
 export AGENT_BROWSER_PIN_TAB=1
-agent-browser screenshot "/worktrees/folder-1/xhs-kanban-debug/evidence/$SESSION_NAME-publish-rehearsal.png" --annotate
+agent-browser screenshot "./evidence/$SESSION_NAME-publish-rehearsal.png" --annotate
 ```
 
 按 schema 输出并立即调用 `kanban_complete`。不得把“找到通用评论框”当成目标楼层绑定成功。

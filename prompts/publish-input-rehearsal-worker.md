@@ -5,7 +5,7 @@
 只读取：
 
 1. 本文件；
-2. `/worktrees/folder-1/xhs-kanban-debug/schemas/publish-input-rehearsal-result.md`；
+2. `./schemas/publish-input-rehearsal-result.md`；
 3. 任务正文指定的 `PARAM_FILE`。
 
 不要读取 README、CHANGELOG、旧日志、Kanban DB、源码、圆桌文件或额外 Skill。基础 `kanban_show` 后直接执行。
@@ -186,7 +186,7 @@ agent-browser wait 300
 agent-browser snapshot -i -c
 ```
 
-清空成功必须同时看到 editable 无正文且 `发送` disabled。若无法确认清空，状态为 `CLEAR_UNCONFIRMED`，**仍然禁止发送或点击取消**，保存 `/worktrees/folder-1/xhs-kanban-debug/evidence/$SESSION_NAME-clear-state.png` 后立即结束。
+清空成功必须同时看到 editable 无正文且 `发送` disabled。若无法确认清空，状态为 `CLEAR_UNCONFIRMED`，**仍然禁止发送或点击取消**，保存 `./evidence/$SESSION_NAME-clear-state.png` 后立即结束。
 
 安全红线：
 
