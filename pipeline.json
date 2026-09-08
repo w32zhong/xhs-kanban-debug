@@ -2,7 +2,7 @@
   "stage": "full-e2e-v1",
   "board_prefix": "xhs-e2e-full",
   "workspace": ".",
-  "default_assignee": "agent-26c319b9362c7cec",
+  "default_assignee": "agent-6ef809b5bf450f39",
   "max_parallel": 2,
   "browser_policy": {
     "vision_calls_per_business_run": 0,
