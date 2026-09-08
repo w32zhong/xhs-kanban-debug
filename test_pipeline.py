@@ -49,6 +49,33 @@ class QualityRoundtablePipelineTests(unittest.TestCase):
         self.assertIn("不要求必须是强烈痛点", prompt)
         self.assertIn("换下一个关键词", prompt)
 
+    def test_scout_prefers_candidates_that_need_only_one_short_angle(self) -> None:
+        prompt = (ROOT / "prompts/scout-worker.md").read_text(encoding="utf-8")
+        self.assertIn("一句话只完成一个方面", prompt)
+        self.assertIn("不需要同时完成共情、解释、建议和追问", prompt)
+        self.assertIn("事实问题", prompt)
+
+    def test_review_enforces_length_necessity_not_formula(self) -> None:
+        prompt = (ROOT / "prompts/review-worker.md").read_text(encoding="utf-8")
+        self.assertIn("默认一两句", prompt)
+        self.assertIn("问句不是必选项", prompt)
+        self.assertIn("承接句不是必选项", prompt)
+        self.assertIn("拟人的懒惰", prompt)
+        self.assertNotIn("20–100 个中文字符", prompt)
+
+    def test_chair_runs_compression_and_anti_template_pass(self) -> None:
+        prompt = (ROOT / "prompts/chair-worker.md").read_text(encoding="utf-8")
+        self.assertIn("先删到不能再删", prompt)
+        self.assertIn("一句话能完成，就不要写两句", prompt)
+        self.assertIn("不得为了结构完整补问句", prompt)
+        self.assertIn("事实问题确实需要解释", prompt)
+        self.assertIn("像随手回的", prompt)
+
+    def test_roundtable_focus_does_not_force_empathy_or_questions(self) -> None:
+        tasks = {task["key"]: task for task in self.pipeline["tasks"]}
+        self.assertNotIn("接住具体焦虑", tasks["review-a"]["body_vars"]["REVIEWER_FOCUS"])
+        self.assertNotIn("好奇心与互动意愿", tasks["review-b"]["body_vars"]["REVIEWER_FOCUS"])
+
     def test_numbered_reply_bubble_is_allowed_when_row_order_is_clear(self) -> None:
         publish = (ROOT / "prompts/publish-send-worker.md").read_text(encoding="utf-8")
         self.assertIn("点赞数 → 回复气泡数", publish)
