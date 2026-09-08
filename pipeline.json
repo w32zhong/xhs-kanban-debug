@@ -5,10 +5,10 @@
   "max_parallel": 1,
   "tasks": [
     {
-      "key": "failure_coordination",
-      "name": "失败协调-Qwen",
+      "key": "finalize",
+      "name": "协调与清理-Qwen",
       "assignee": "agent-26c319b9362c7cec",
-      "prompt": "prompts/failure-coordinator.md",
+      "prompt": "prompts/finalize-worker.md",
       "max_runtime": "5m",
       "param_vars": {
         "PUBLISH_STATUS_LITERAL": "SEND_FAILED",
@@ -19,10 +19,12 @@
         "THREAD_EXHAUSTED_LITERAL": "NO",
         "EXACT_DRAFT_COUNT_LITERAL": "UNKNOWN",
         "EXACT_DRAFT_OUTSIDE_TARGET_LITERAL": "UNKNOWN",
-        "CONTENT_MODIFIED_LITERAL": "NO"
+        "CONTENT_MODIFIED_LITERAL": "NO",
+        "RUN_PREFIX_LITERAL": "xhs-example-",
+        "ARCHIVE_BOARD_LITERAL": "NO"
       },
       "body_vars": {
-        "SCENARIO_ID": "ambiguous-send-outcome"
+        "SCENARIO_ID": "finalize-example"
       }
     }
   ]

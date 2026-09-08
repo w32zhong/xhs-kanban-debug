@@ -29,12 +29,12 @@ python3 run_iteration.py
 
 当前按用户要求**只使用 Qwen 小虾**，暂不使用 Mimo。继续使用本地 prompt、schema 和参数文件机制，从全新 board/task/session/context 执行并观测流程；发现可泛化问题即修订本地文档并整板重跑。
 
-## 全链路 E2E 端到端流程（8 阶段）
+## 全链路 E2E 端到端流程（7 阶段）
 
 ### 任务依赖图
 
 ```
-1️⃣ 搜索 ──→ 2️⃣ 独立验证 ──→ 3A 圆桌委员A ──→ 4️⃣ 委员长 ──→ 5️⃣ 发布 ──→ 6️⃣ 发布后复核 ──→ 7️⃣ 失败协调 ──→ 8️⃣ 清理
+1️⃣ 搜索 ──→ 2️⃣ 独立验证 ──→ 3A 圆桌委员A ──→ 4️⃣ 委员长 ──→ 5️⃣ 发布 ──→ 6️⃣ 发布后复核 ──→ 7️⃣ 协调与清理
                                               ↘ 3B 圆桌委员B ↗
 ```
 
@@ -88,7 +88,7 @@ hermes kanban --board "$BOARD" create "5️⃣ 发布" \
   --parent <委员长_id> --initial-status blocked \
   --body "第一步读取：prompts/publish-send-worker.md\nPARAM_FILE: runtime-params/xxx-send.sh" ...
 
-# 6️⃣ 发布后复核 → 7️⃣ 失败协调 → 8️⃣ 清理（逐级 --parent 上游）
+# 6️⃣ 发布后复核 → 7️⃣ 协调与清理（一个收尾 worker）
 
 # 4. Dispatch 首批（只 spawn ready 的，即搜索卡）
 hermes kanban --board "$BOARD" dispatch --max 1 --json
@@ -117,14 +117,13 @@ Dispatcher 会在父任务完成后自动推进 blocked 子任务，无需手动
 | 3A | 圆桌委员A | ✅ PASS，47 字定稿 | ~2min |
 | 3B | 圆桌委员B | ✅ PASS，附账号门禁警告 | ~2min |
 | 4 | 委员长 | ✅ APPROVE，采纳委员 A 稿 | ~1.5min |
-| 5 | 发布 | ⚠️ `SETUP_ERROR`（CDP 连接不稳定） | 12min |
-| 6 | 发布后复核 | ✅ `REPLY_NOT_FOUND`（正确：未发送） | ~2min |
-| 7 | 失败协调 | ✅ `ESCALATE_MANUAL`（保守裁定） | ~2min |
-| 8 | 清理 | ✅ 删除临时文件、关闭标签页、归档看板 | ~1min |
+| 5 | 发布 | ✅ `SEND_SUCCESS`，定稿逐字输入并发送到正确楼层 | ~8.5min |
+| 6 | 发布后复核 | ✅ `VERIFIED`，正确线程内定稿恰好出现 1 次 | ~4.5min |
+| 7 | 协调与清理 | ✅ `NO_ACTION`；清理临时文件、冗余标签和完成后的看板 | ~2min |
 
 **候选**: 帖子「codex 总是还没完成任务就自动结束怎么办」→ 评论「哎我也是没招了」（Kiki 总裁）
 
-**发送失败根因**: 基础设施问题（清理浏览器标签页时 CDP 连接断开），非逻辑 bug。
+**最终结果**: 发布成功；独立复核确认目标上下文匹配、线程穷尽、定稿逐字恰好出现一次，且无跨线程或重复回复。
 
 ### 关键 Bug 修复
 
@@ -138,7 +137,7 @@ Dispatcher 会在父任务完成后自动推进 blocked 子任务，无需手动
 
 1. **点击帖子标题会打开新标签页**：详情页在新 tab 中生成，需要 `agent-browser tab list --json` + `agent-browser tab tN` 切换。
 2. **不要在 worker 运行期间清理标签页**：会导致 CDP 连接断开，引发 `SETUP_ERROR`。
-3. **失败协调的参数文件是静态占位**：`PUBLISH_STATUS_LITERAL=PENDING` 等值在创建卡时写死，不会随运行时结果动态更新。协调员只能保守裁定（`ESCALATE_MANUAL`）。
+3. **收尾卡必须接收运行时结构化结果**：创建或放行第 7 阶段前，将发布与复核结果写入 `PARAM_FILE`；不要保留 `PENDING` 静态占位，否则只能保守裁定。
 
 ## 可复现约束
 
@@ -152,7 +151,7 @@ Dispatcher 会在父任务完成后自动推进 blocked 子任务，无需手动
 
 ## 文件说明
 
-### Prompts（8 个）
+### Prompts（7 个）
 
 - `prompts/search-worker.md`：搜索 worker（含 `agent-browser read`）。
 - `prompts/verify-worker.md`：独立验证 worker（含 `agent-browser read` 优先）。
@@ -160,12 +159,11 @@ Dispatcher 会在父任务完成后自动推进 blocked 子任务，无需手动
 - `prompts/chair-worker.md`：委员长 worker（纯文本，综合裁定）。
 - `prompts/publish-send-worker.md`：发布 worker（搜索→定位→绑定→输入→发送，一步完成）。
 - `prompts/publish-verify-worker.md`：发布后独立复核。
-- `prompts/failure-coordinator.md`：无副作用失败协调决策表。
-- `prompts/cleanup-worker.md`：清理工（删临时文件、关标签、归档看板）。
+- `prompts/finalize-worker.md`：协调与清理合并 worker；先裁定，再按本轮前缀删除临时文件、关闭非 Kanban UI 标签。
 
 ### Schemas（7 个）
 
-- `schemas/search-result.md`、`schemas/verify-result.md`、`schemas/review-result.md`、`schemas/chair-result.md`、`schemas/publish-send-result.md`、`schemas/publish-verify-result.md`、`schemas/failure-result.md`
+- `schemas/search-result.md`、`schemas/verify-result.md`、`schemas/review-result.md`、`schemas/chair-result.md`、`schemas/publish-send-result.md`、`schemas/publish-verify-result.md`、`schemas/finalize-result.md`
 
 ### 工具与配置
 
