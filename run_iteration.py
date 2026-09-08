@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
-"""Create a fresh bottom-up debug board and dispatch it immediately.
+"""Create and dispatch one XHS workflow iteration.
 
-Reads targets from publish-target-pool.json and rotates through them,
-so each iteration uses a different target. Tracks used targets in
-target-rotation-state.json.
+Dynamic discovery is the default. Static target rotation is fixture-only.
 """
 from __future__ import annotations
 
@@ -104,10 +102,12 @@ def main() -> None:
     if guard.stdout:
         print(guard.stdout, file=sys.stderr)
 
-    # Pick from target pool if available and not overridden by --target-id.
-    # The pool's presence in the project implies targets should be used.
+    # Dynamic mode lets the scout choose the candidate. Fixture rotation is opt-in.
     state = load_state()
-    target = selected_target if selected_target is not None else pick_next_target(state)
+    dynamic_mode = config.get("target_source", "dynamic_search") == "dynamic_search"
+    target = None if dynamic_mode and selected_target is None else (
+        selected_target if selected_target is not None else pick_next_target(state)
+    )
     target_idx = POOL["targets"].index(target) if target else None
 
     suffix = time.strftime("%Y%m%d-%H%M%S")
@@ -119,6 +119,10 @@ def main() -> None:
 
     params_dir = ROOT / "runtime-params"
     params_dir.mkdir(exist_ok=True)
+    runtime_dir = ROOT / "runtime"
+    runtime_dir.mkdir(exist_ok=True)
+    for stale in runtime_dir.glob("*.json"):
+        stale.unlink(missing_ok=True)
     created: list[dict] = []
     ids_by_key: dict[str, str] = {}
 
@@ -128,12 +132,12 @@ def main() -> None:
         prompt_path = str(ROOT / task["prompt"])
         param_path = params_dir / f"{session_name}.sh"
 
-        # Use target pool data, falling back to pipeline.json for non-overridden fields
-        keyword = target.get("keyword") or task.get("keyword", "")
-        target_title = target.get("target_title") or task.get("target_title", "")
-        target_author = target.get("target_comment_author") or task.get("target_comment_author", "")
-        target_excerpt = target.get("target_comment_excerpt") or task.get("target_comment_excerpt", "")
-        approved_draft = target.get("approved_draft") or task.get("approved_draft", "")
+        target_data = target or {}
+        keyword = target_data.get("keyword") or task.get("keyword", "")
+        target_title = target_data.get("target_title") or task.get("target_title", "")
+        target_author = target_data.get("target_comment_author") or task.get("target_comment_author", "")
+        target_excerpt = target_data.get("target_comment_excerpt") or task.get("target_comment_excerpt", "")
+        approved_draft = target_data.get("approved_draft") or task.get("approved_draft", "")
 
         param_content = f"SESSION_NAME={shlex.quote(session_name)}\n"
         if keyword:
@@ -163,14 +167,17 @@ def main() -> None:
             body_lines.append(f"{key}: {value}")
         body_lines.append("禁止 git/pwd/env/目录搜索/hermes kanban CLI/SQLite/额外 skill；严格遵守所引用 prompt 的副作用边界。")
 
+        configured_assignee = task.get("assignee") or config.get("default_assignee", "")
         args = [
             "--board", board, "create", task["name"],
             "--body", "\n".join(body_lines),
-            "--assignee", task.get("assignee") or config.get("default_assignee", ""),
             "--workspace", f"dir:{config['workspace']}",
             "--max-runtime", task.get("max_runtime", "12m"),
             "--max-retries", "1",
+            "--priority", str(100 - index),
         ]
+        if index == 1:
+            args.extend(["--assignee", configured_assignee])
         for parent_key in task.get("parents", []):
             if parent_key not in ids_by_key:
                 raise SystemExit(f"unknown/uncreated parent key {parent_key!r} for task {task['key']!r}")
@@ -186,7 +193,7 @@ def main() -> None:
             "id": item["id"],
             "title": task["name"],
             "session_name": session_name,
-            "target_id": target.get("id", "unknown"),
+            "target_id": target_data.get("id", "dynamic"),
             "target_title": target_title,
         })
 
@@ -199,19 +206,20 @@ def main() -> None:
     if target_idx is not None and target_idx not in state["used_indices"]:
         state["used_indices"].append(target_idx)
     state["run_count"] = state.get("run_count", 0) + 1
-    state["last_target_id"] = target.get("id", "unknown")
-    state["last_target_title"] = target.get("target_title", "")
+    state["last_target_id"] = (target or {}).get("id", "dynamic")
+    state["last_target_title"] = (target or {}).get("target_title", "")
     save_state(state)
 
     state_out = {
         "board": board,
+        "profile": config.get("default_assignee", ""),
         "stage": config.get("stage"),
         "created": created,
         "dispatch": dispatched,
         "started_at": int(time.time()),
         "target_rotated_from_pool": target_idx is not None,
-        "target_id": target.get("id", "unknown"),
-        "target_layout": target.get("layout_goal", ""),
+        "target_id": (target or {}).get("id", "dynamic"),
+        "target_layout": (target or {}).get("layout_goal", "dynamic discovery"),
         "run_number": state["run_count"],
     }
     (ROOT / "current-run.json").write_text(

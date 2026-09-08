@@ -2,8 +2,8 @@
   "profile": "agent-6ef809b5bf450f39",
   "workspace": "/worktrees/folder-1/xhs-kanban-workflow",
   "board_slug": "xhs-run",
-  "poll_seconds": 20,
-  "timeout_minutes": 45,
-  "keep_board": false,
+  "poll_seconds": 3,
+  "timeout_minutes": 30,
+  "keep_board": true,
   "max_output_chars": 6000
 }

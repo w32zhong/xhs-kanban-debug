@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Run one bounded XHS Kanban workflow and always clean transient resources.
+"""Run one bounded XHS Kanban test workflow and clean transient resources.
 
-Designed for cron: one compact JSON result on stdout, no persistent watcher log,
-and a process lock preventing overlapping runs.
+This runner is manual while the workflow is being refined. It does not create
+Cron jobs or push changes.
 """
 from __future__ import annotations
 
@@ -19,9 +19,10 @@ from pathlib import Path
 from typing import Any, Iterator
 
 ROOT = Path(__file__).resolve().parent
-RUNTIME_DIRS = ("runtime-params", "logs", "evidence", "roundtable")
+RUNTIME_DIRS = ("runtime", "runtime-params", "logs", "evidence", "roundtable")
 RUNTIME_ROOT_FILES = ("current-run.json", "full-e2e-current.json")
 ACTIVE_STATUSES = {"triage", "todo", "scheduled", "ready", "running", "review"}
+WAITING_STATUSES = {"triage", "todo", "scheduled", "ready", "blocked"}
 
 
 @dataclass(frozen=True)
@@ -29,7 +30,7 @@ class RunnerConfig:
     profile: str
     workspace: Path
     board_slug: str = "xhs-run"
-    poll_seconds: int = 20
+    poll_seconds: int = 3
     timeout_minutes: int = 45
     keep_board: bool = False
     max_output_chars: int = 6000
@@ -60,7 +61,7 @@ def load_config(
         profile=str(resolved_profile),
         workspace=workspace_path.resolve(),
         board_slug=str(data.get("board_slug", "xhs-run")),
-        poll_seconds=int(poll_seconds or data.get("poll_seconds", 20)),
+        poll_seconds=int(poll_seconds or data.get("poll_seconds", 3)),
         timeout_minutes=int(timeout_minutes or data.get("timeout_minutes", 45)),
         keep_board=bool(data.get("keep_board", False) if keep_board is None else keep_board),
         max_output_chars=int(data.get("max_output_chars", 6000)),
@@ -98,7 +99,7 @@ def prepare_board(board_slug: str, workspace: Path) -> None:
             command(["hermes", "kanban", "boards", "rm", slug, "--delete"])
     command([
         "hermes", "kanban", "boards", "create", board_slug,
-        "--name", "小红书定时工作流",
+        "--name", "小红书流程测试 · 未定稿",
         "--default-workdir", str(workspace),
         "--switch",
     ])
@@ -124,10 +125,97 @@ def board_is_terminal(tasks: list[dict[str, Any]]) -> bool:
     return bool(tasks) and not any(task.get("status") in ACTIVE_STATUSES for task in tasks)
 
 
-def wait_for_board(board: str, cfg: RunnerConfig) -> list[dict[str, Any]]:
+def activate_waiting_task(board: str, task_id: str, profile: str) -> None:
+    """Assign the next semantically approved card so the dispatcher may spawn it."""
+    command(["hermes", "kanban", "--board", board, "assign", task_id, profile])
+
+
+def finish_without_worker(board: str, task_id: str, reason: str) -> None:
+    """Complete a waiting card deterministically so no LLM worker is spawned."""
+    command([
+        "hermes", "kanban", "--board", board, "promote", task_id,
+        "semantic gate skip", "--force",
+    ])
+    metadata = json.dumps({"status": "SKIPPED", "reason": reason}, ensure_ascii=False)
+    command([
+        "hermes", "kanban", "--board", board, "complete", task_id,
+        "--summary", f"SKIPPED: {reason}",
+        "--metadata", metadata,
+    ])
+
+
+def _result_status(run: dict[str, Any]) -> str | None:
+    metadata = run.get("metadata") or {}
+    return (
+        metadata.get("status")
+        or metadata.get("publish_status")
+        or metadata.get("decision")
+        or metadata.get("recommendation")
+    )
+
+
+def apply_semantic_gates(
+    board: str,
+    state: dict[str, Any],
+    tasks: list[dict[str, Any]],
+) -> bool:
+    """Fail closed and launch only the next semantically approved stage.
+
+    Kanban dependencies only mean "the parent finished". Downstream cards are
+    deliberately created unassigned, so the dispatcher cannot race ahead of
+    this controller. A passing result assigns exactly the next card; a failing
+    result completes the rest as SKIPPED without starting more LLM workers.
+    """
+    created = state.get("created", [])
+    key_to_id = {item.get("key"): item.get("id") for item in created}
+    task_by_id = {task.get("id"): task for task in tasks}
+    profile = str(state.get("profile") or "")
+
+    def stage_status(key: str) -> str | None:
+        task_id = key_to_id.get(key)
+        task = task_by_id.get(task_id, {})
+        if not task_id or task.get("status") != "done" or not task.get("assignee"):
+            return None
+        return _result_status(latest_run(board, task_id))
+
+    order = ["scout", "chair", "publish-send", "publish-verify"]
+    required = {
+        "scout": "FOUND",
+        "chair": "APPROVE",
+        "publish-send": "SEND_SUCCESS",
+    }
+
+    changed = False
+    for index, key in enumerate(order[:-1]):
+        result_status = stage_status(key)
+        if result_status is None:
+            break
+        next_key = order[index + 1]
+        next_id = key_to_id.get(next_key)
+        if result_status != required[key]:
+            reason = f"{key} ended with {result_status}"
+            for downstream_key in order[index + 1:]:
+                task_id = key_to_id.get(downstream_key)
+                task = task_by_id.get(task_id, {})
+                if task_id and task.get("status") in WAITING_STATUSES:
+                    finish_without_worker(board, task_id, reason)
+                    changed = True
+            return changed
+        next_task = task_by_id.get(next_id, {})
+        if next_id and next_task.get("status") in WAITING_STATUSES and not next_task.get("assignee"):
+            if not profile:
+                raise RuntimeError("iteration state is missing worker profile")
+            activate_waiting_task(board, next_id, profile)
+            return True
+    return changed
+
+
+def wait_for_board(board: str, state: dict[str, Any], cfg: RunnerConfig) -> list[dict[str, Any]]:
     deadline = time.monotonic() + cfg.timeout_minutes * 60
     while True:
         tasks = list_tasks(board)
+        if apply_semantic_gates(board, state, tasks):
+            tasks = list_tasks(board)
         if board_is_terminal(tasks):
             return tasks
         if time.monotonic() >= deadline:
@@ -159,6 +247,7 @@ def compact_result(board: str, state: dict[str, Any], tasks: list[dict[str, Any]
                 or metadata.get("decision")
                 or metadata.get("recommendation")
             ),
+            "metadata": metadata,
         })
     verify = next((stage for stage in stages if stage["key"] == "publish-verify"), {})
     publish = next((stage for stage in stages if stage["key"] == "publish-send"), {})
@@ -175,10 +264,13 @@ def compact_result(board: str, state: dict[str, Any], tasks: list[dict[str, Any]
 
 def is_published_and_verified(stages: list[dict[str, Any]]) -> bool:
     status = {stage.get("key"): stage.get("result_status") for stage in stages}
+    verify = next((stage for stage in stages if stage.get("key") == "publish-verify"), {})
+    verify_metadata = verify.get("metadata") or {}
     return (
         status.get("chair") == "APPROVE"
         and status.get("publish-send") == "SEND_SUCCESS"
         and status.get("publish-verify") == "VERIFIED"
+        and verify_metadata.get("exact_draft_count_in_target_thread", "1") in (1, "1")
     )
 
 
@@ -251,7 +343,7 @@ def execute_campaign(root: Path, cfg: RunnerConfig) -> dict[str, Any]:
             if not isinstance(started_board, str) or not started_board:
                 raise RuntimeError("run_iteration.py did not return a board slug")
             board = started_board
-            tasks = wait_for_board(started_board, cfg)
+            tasks = wait_for_board(started_board, state, cfg)
             result = compact_result(started_board, state, tasks)
     except Exception as exc:
         result = {"status": "ERROR", "error": f"{type(exc).__name__}: {exc}"}

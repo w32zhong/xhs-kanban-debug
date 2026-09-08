@@ -1,75 +1,69 @@
 {
-  "stage": "full-e2e-v1",
-  "board_prefix": "xhs-e2e-full",
+  "stage": "fast-dynamic-e2e-v2",
+  "board_prefix": "xhs-run",
   "workspace": ".",
   "default_assignee": "agent-6ef809b5bf450f39",
-  "max_parallel": 2,
-  "browser_policy": {
-    "vision_calls_per_business_run": 0,
-    "pixel_screenshots_per_business_run": 0,
-    "evidence": "fresh snapshot + agent-browser read",
-    "on_missing_critical_evidence": "fail_closed"
+  "target_source": "dynamic_search",
+  "search_keywords": [
+    "AI长任务中断怎么办",
+    "Codex任务断了怎么继续",
+    "不会写代码 AI助手"
+  ],
+  "max_parallel": 1,
+  "policy": {
+    "candidate_max_age_days": 30,
+    "max_posts_checked": 3,
+    "unknown_account_is_warning": true,
+    "require_exact_target_floor": true,
+    "require_no_exact_duplicate_in_target_thread": true,
+    "require_no_exact_duplicate_outside_target_thread": false,
+    "vision_calls": 0
   },
   "tasks": [
     {
-      "key": "search",
-      "name": "1️⃣ 搜索",
-      "prompt": "prompts/search-worker.md",
-      "max_runtime": "12m",
-      "parents": []
-    },
-    {
-      "key": "verify",
-      "name": "2️⃣ 独立验证",
-      "prompt": "prompts/verify-worker.md",
-      "max_runtime": "12m",
-      "parents": ["search"]
-    },
-    {
-      "key": "review-a",
-      "name": "3A 圆桌委员A",
-      "prompt": "prompts/review-worker.md",
+      "key": "scout",
+      "name": "1️⃣ 搜索与核验",
+      "prompt": "prompts/scout-worker.md",
       "max_runtime": "8m",
-      "parents": ["verify"],
+      "parents": [],
       "body_vars": {
-        "REVIEWER_FOCUS": "用户心理、帮助价值",
-        "OUTPUT_FILE": "roundtable/reviewer-a.md"
-      }
-    },
-    {
-      "key": "review-b",
-      "name": "3B 圆桌委员B",
-      "prompt": "prompts/review-worker.md",
-      "max_runtime": "8m",
-      "parents": ["verify"],
-      "body_vars": {
-        "REVIEWER_FOCUS": "零营销、安全、反钓鱼",
-        "OUTPUT_FILE": "roundtable/reviewer-b.md"
+        "OUTPUT_FILE": "runtime/scout-result.json"
       }
     },
     {
       "key": "chair",
-      "name": "4️⃣ 委员长",
+      "name": "2️⃣ 快速定稿",
       "prompt": "prompts/chair-worker.md",
-      "max_runtime": "8m",
-      "parents": ["review-a", "review-b"],
+      "max_runtime": "3m",
+      "parents": ["scout"],
       "body_vars": {
-        "OUTPUT_FILE": "roundtable/chair-decision.md"
+        "INPUT_FILE": "runtime/scout-result.json",
+        "OUTPUT_FILE": "runtime/chair-decision.json"
       }
     },
     {
       "key": "publish-send",
-      "name": "5️⃣ 发布",
+      "name": "3️⃣ 精确发布",
       "prompt": "prompts/publish-send-worker.md",
-      "max_runtime": "15m",
-      "parents": ["chair"]
+      "max_runtime": "8m",
+      "parents": ["chair"],
+      "body_vars": {
+        "SCOUT_FILE": "runtime/scout-result.json",
+        "CHAIR_FILE": "runtime/chair-decision.json",
+        "OUTPUT_FILE": "runtime/publish-result.json"
+      }
     },
     {
       "key": "publish-verify",
-      "name": "6️⃣ 发布后复核",
+      "name": "4️⃣ 发布复核",
       "prompt": "prompts/publish-verify-worker.md",
-      "max_runtime": "12m",
-      "parents": ["publish-send"]
+      "max_runtime": "6m",
+      "parents": ["publish-send"],
+      "body_vars": {
+        "SCOUT_FILE": "runtime/scout-result.json",
+        "CHAIR_FILE": "runtime/chair-decision.json",
+        "PUBLISH_FILE": "runtime/publish-result.json"
+      }
     }
   ]
 }
