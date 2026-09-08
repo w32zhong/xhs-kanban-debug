@@ -60,9 +60,15 @@ def main() -> None:
     parser.add_argument("--target-id", help="Override publish rehearsal literals from publish-target-pool.json")
     parser.add_argument("--finalize-input", help="Run deterministic finalize_run.py with this JSON input instead of creating a Kanban board")
     parser.add_argument("--dry-run", action="store_true", help="Pass --dry-run to deterministic finalizer")
+    parser.add_argument("--profile", help="Override pipeline.json default_assignee")
+    parser.add_argument("--workspace", help="Override pipeline.json workspace")
     cli = parser.parse_args()
 
     config = json.loads(json.dumps(CONFIG))
+    if cli.profile:
+        config["default_assignee"] = cli.profile
+    if cli.workspace:
+        config["workspace"] = cli.workspace
     # Resolve workspace path relative to project root
     ws = config.get("workspace", ".")
     if not os.path.isabs(ws):

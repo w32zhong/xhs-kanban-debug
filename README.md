@@ -14,13 +14,23 @@ cd /path/to/xhs-kanban-workflow
 # 2. 确保 Hermes profile 的 worker 模型已配置（在 pipeline.json 的 default_assignee 中指定）
 hermes profile list
 
-# 3. 当前 pipeline 使用确定性收尾器；用发布+复核的结构化 JSON 调用
-python3 run_iteration.py --finalize-input runtime-params/<run>-finalize.json
+# 3. 一键运行一轮（适合手动或 cron；不保证一定发布）
+python3 run.py
 
-# 只预览裁定与清理目标，不修改文件或标签页
-python3 run_iteration.py --finalize-input runtime-params/<run>-finalize.json --dry-run
+# 通用变量可通过参数覆盖，不需要编辑源码
+python3 run.py \
+  --profile agent-xxxxxxxxxxxxxxxx \
+  --workspace /absolute/path/to/xhs-kanban-workflow
 
-# 4. 或按 README 下方"全链路 E2E"章节手动创建看板
+# 也可编辑 runner-config.json，或设置 XHS_AGENT_PROFILE / XHS_WORKSPACE。
+# run.py 使用进程锁避免重叠；无论成功、拒绝、超时或异常，都会清理本轮 tabs、
+# runtime-params、evidence、logs、roundtable 临时文件，并默认删除本轮临时 board。
+# stdout 只输出一份紧凑 JSON，适合 cronjob 直接收集。
+
+# 4. 底层调试：仅创建 board 并 dispatch（run.py 会调用它）
+python3 run_iteration.py
+
+# 5. 确定性收尾器仍可单独调用
 ```
 
 所有 prompt 文件使用相对路径（`./prompts/...`、`./schemas/...`），Kanban worker 的 cwd 自动设为 workspace 目录。
