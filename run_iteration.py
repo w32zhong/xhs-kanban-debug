@@ -92,15 +92,11 @@ def main() -> None:
     if guard.returncode:
         raise SystemExit("browser resource guard failed; refusing to start another iteration")
 
-    # Publish stages rotate through the target pool. Non-browser stages such as
-    # failure coordination may omit target literals entirely.
+    # Pick from target pool if available and not overridden by --target-id.
+    # The pool's presence in the project implies targets should be used.
     state = load_state()
-    uses_target_pool = selected_target is not None or any(
-        task.get("keyword") or task.get("target_title") or task.get("target_comment_author")
-        for task in config["tasks"]
-    )
-    target = selected_target if selected_target is not None else (pick_next_target(state) if uses_target_pool else {})
-    target_idx = POOL["targets"].index(target) if uses_target_pool else None
+    target = selected_target if selected_target is not None else pick_next_target(state)
+    target_idx = POOL["targets"].index(target) if target else None
 
     suffix = time.strftime("%Y%m%d-%H%M%S")
     board = f"{config['board_prefix']}-{suffix}"
@@ -200,7 +196,7 @@ def main() -> None:
         "created": created,
         "dispatch": dispatched,
         "started_at": int(time.time()),
-        "target_rotated_from_pool": uses_target_pool,
+        "target_rotated_from_pool": target_idx is not None,
         "target_id": target.get("id", "unknown"),
         "target_layout": target.get("layout_goal", ""),
         "run_number": state["run_count"],
