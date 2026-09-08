@@ -11,7 +11,7 @@
 git clone <repo-url> /path/to/xhs-kanban-workflow
 cd /path/to/xhs-kanban-workflow
 
-# 2. 确保 Hermes profile 的 worker 模型已配置（默认 agent-26c319b9362c7cec）
+# 2. 确保 Hermes profile 的 worker 模型已配置（在 pipeline.json 的 default_assignee 中指定）
 hermes profile list
 
 # 3. 当前 pipeline 使用确定性收尾器；用发布+复核的结构化 JSON 调用
@@ -71,7 +71,7 @@ APPROVED_DRAFT_LITERAL='...'
 # 3. 逐级创建任务（--parent 依赖 + --initial-status blocked）
 hermes kanban --board "$BOARD" create "1️⃣ 搜索" \
   --body "第一步读取：prompts/search-worker.md\nPARAM_FILE: runtime-params/xxx-search.sh" \
-  --assignee agent-26c319b9362c7cec --workspace "dir:$(pwd)" \
+  --assignee $(python3 -c "import json; print(json.load(open('pipeline.json'))['default_assignee'])") --workspace "dir:$(pwd)" \
   --max-runtime 12m --max-retries 1
 
 hermes kanban --board "$BOARD" create "2️⃣ 独立验证" \

@@ -157,7 +157,7 @@ def main() -> None:
         args = [
             "--board", board, "create", task["name"],
             "--body", "\n".join(body_lines),
-            "--assignee", task["assignee"],
+            "--assignee", task.get("assignee") or config.get("default_assignee", ""),
             "--workspace", f"dir:{config['workspace']}",
             "--max-runtime", task.get("max_runtime", "12m"),
             "--max-retries", "1",

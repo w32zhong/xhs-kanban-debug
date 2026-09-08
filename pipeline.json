@@ -2,6 +2,7 @@
   "stage": "full-e2e-v1",
   "board_prefix": "xhs-e2e-full",
   "workspace": ".",
+  "default_assignee": "agent-26c319b9362c7cec",
   "max_parallel": 2,
   "browser_policy": {
     "vision_calls_per_business_run": 0,
@@ -14,7 +15,6 @@
       "key": "search",
       "name": "1️⃣ 搜索",
       "prompt": "prompts/search-worker.md",
-      "assignee": "agent-26c319b9362c7cec",
       "max_runtime": "12m",
       "parents": []
     },
@@ -22,7 +22,6 @@
       "key": "verify",
       "name": "2️⃣ 独立验证",
       "prompt": "prompts/verify-worker.md",
-      "assignee": "agent-26c319b9362c7cec",
       "max_runtime": "12m",
       "parents": ["search"]
     },
@@ -30,7 +29,6 @@
       "key": "review-a",
       "name": "3A 圆桌委员A",
       "prompt": "prompts/review-worker.md",
-      "assignee": "agent-26c319b9362c7cec",
       "max_runtime": "8m",
       "parents": ["verify"],
       "body_vars": {
@@ -42,7 +40,6 @@
       "key": "review-b",
       "name": "3B 圆桌委员B",
       "prompt": "prompts/review-worker.md",
-      "assignee": "agent-26c319b9362c7cec",
       "max_runtime": "8m",
       "parents": ["verify"],
       "body_vars": {
@@ -54,7 +51,6 @@
       "key": "chair",
       "name": "4️⃣ 委员长",
       "prompt": "prompts/chair-worker.md",
-      "assignee": "agent-26c319b9362c7cec",
       "max_runtime": "8m",
       "parents": ["review-a", "review-b"],
       "body_vars": {
@@ -65,7 +61,6 @@
       "key": "publish-send",
       "name": "5️⃣ 发布",
       "prompt": "prompts/publish-send-worker.md",
-      "assignee": "agent-26c319b9362c7cec",
       "max_runtime": "15m",
       "parents": ["chair"]
     },
@@ -73,7 +68,6 @@
       "key": "publish-verify",
       "name": "6️⃣ 发布后复核",
       "prompt": "prompts/publish-verify-worker.md",
-      "assignee": "agent-26c319b9362c7cec",
       "max_runtime": "12m",
       "parents": ["publish-send"]
     }
