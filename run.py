@@ -28,6 +28,7 @@ ACTIVE_STATUSES = {"triage", "todo", "scheduled", "ready", "running", "review"}
 class RunnerConfig:
     profile: str
     workspace: Path
+    board_slug: str = "xhs-run"
     poll_seconds: int = 20
     timeout_minutes: int = 45
     keep_board: bool = False
@@ -58,6 +59,7 @@ def load_config(
     return RunnerConfig(
         profile=str(resolved_profile),
         workspace=workspace_path.resolve(),
+        board_slug=str(data.get("board_slug", "xhs-run")),
         poll_seconds=int(poll_seconds or data.get("poll_seconds", 20)),
         timeout_minutes=int(timeout_minutes or data.get("timeout_minutes", 45)),
         keep_board=bool(data.get("keep_board", False) if keep_board is None else keep_board),
@@ -89,12 +91,26 @@ def list_boards() -> set[str]:
     return {item["slug"] for item in json.loads(proc.stdout)}
 
 
+def prepare_board(board_slug: str, workspace: Path) -> None:
+    """Keep exactly one non-default XHS board visible in the dashboard."""
+    for slug in sorted(list_boards()):
+        if slug != "default" and slug.startswith("xhs"):
+            command(["hermes", "kanban", "boards", "rm", slug, "--delete"])
+    command([
+        "hermes", "kanban", "boards", "create", board_slug,
+        "--name", "小红书定时工作流",
+        "--default-workdir", str(workspace),
+        "--switch",
+    ])
+
+
 def start_iteration(root: Path, cfg: RunnerConfig) -> dict[str, Any]:
     proc = command([
         sys.executable,
         str(root / "run_iteration.py"),
         "--profile", cfg.profile,
         "--workspace", str(cfg.workspace),
+        "--board-slug", cfg.board_slug,
     ], cwd=root)
     return json.loads(proc.stdout)
 
@@ -152,9 +168,18 @@ def compact_result(board: str, state: dict[str, Any], tasks: list[dict[str, Any]
         "target_id": state.get("target_id"),
         "publish_status": publish.get("result_status"),
         "verify_status": verify.get("result_status"),
-        "published_and_verified": verify.get("result_status") == "VERIFIED",
+        "published_and_verified": is_published_and_verified(stages),
         "stages": stages,
     }
+
+
+def is_published_and_verified(stages: list[dict[str, Any]]) -> bool:
+    status = {stage.get("key"): stage.get("result_status") for stage in stages}
+    return (
+        status.get("chair") == "APPROVE"
+        and status.get("publish-send") == "SEND_SUCCESS"
+        and status.get("publish-verify") == "VERIFIED"
+    )
 
 
 def snapshot_runtime_files(root: Path) -> set[Path]:
@@ -215,13 +240,12 @@ def remove_board(board: str) -> dict[str, Any]:
 def execute_campaign(root: Path, cfg: RunnerConfig) -> dict[str, Any]:
     started = time.time()
     runtime_before = snapshot_runtime_files(root)
-    boards_before: set[str] = set()
     board: str | None = None
     result: dict[str, Any] = {"status": "ERROR", "error": "runner did not start"}
     cleanup: dict[str, Any] = {}
     try:
         with runner_lock(root):
-            boards_before = list_boards()
+            prepare_board(cfg.board_slug, cfg.workspace)
             state = start_iteration(root, cfg)
             started_board = state.get("board")
             if not isinstance(started_board, str) or not started_board:
@@ -232,16 +256,7 @@ def execute_campaign(root: Path, cfg: RunnerConfig) -> dict[str, Any]:
     except Exception as exc:
         result = {"status": "ERROR", "error": f"{type(exc).__name__}: {exc}"}
     finally:
-        if board is None and boards_before:
-            try:
-                new_boards = list_boards() - boards_before
-                board = sorted(new_boards)[-1] if len(new_boards) == 1 else None
-            except Exception:
-                board = None
-        if board and (result.get("status") == "ERROR" or not cfg.keep_board):
-            cleanup["board"] = remove_board(board)
-        else:
-            cleanup["board"] = {"ok": True, "kept": bool(board)}
+        cleanup["board"] = {"ok": True, "kept": True, "slug": cfg.board_slug}
         cleanup["tabs"] = cleanup_browser_tabs(root)
         cleanup["files"] = cleanup_new_runtime_files(root, runtime_before)
     result["cleanup"] = cleanup

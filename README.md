@@ -23,8 +23,10 @@ python3 run.py \
   --workspace /absolute/path/to/xhs-kanban-workflow
 
 # 也可编辑 runner-config.json，或设置 XHS_AGENT_PROFILE / XHS_WORKSPACE。
-# run.py 使用进程锁避免重叠；无论成功、拒绝、超时或异常，都会清理本轮 tabs、
-# runtime-params、evidence、logs、roundtable 临时文件，并默认删除本轮临时 board。
+# run.py 使用进程锁避免重叠；每轮开始前删除旧的 `xhs*` 工作流看板，
+# 然后重建固定 slug `xhs-run`，因此 Kanban UI 中始终只需查看同一个看板。
+# 无论成功、拒绝、超时或异常，都会保留当前 `xhs-run` 看板供查看，同时清理本轮 tabs、
+# runtime-params、evidence、logs、roundtable 临时文件。
 # stdout 只输出一份紧凑 JSON，适合 cronjob 直接收集。
 
 # 4. 底层调试：仅创建 board 并 dispatch（run.py 会调用它）

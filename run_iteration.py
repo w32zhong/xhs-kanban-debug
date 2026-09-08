@@ -62,6 +62,7 @@ def main() -> None:
     parser.add_argument("--dry-run", action="store_true", help="Pass --dry-run to deterministic finalizer")
     parser.add_argument("--profile", help="Override pipeline.json default_assignee")
     parser.add_argument("--workspace", help="Override pipeline.json workspace")
+    parser.add_argument("--board-slug", help="Use a board already prepared by run.py")
     cli = parser.parse_args()
 
     config = json.loads(json.dumps(CONFIG))
@@ -110,8 +111,9 @@ def main() -> None:
     target_idx = POOL["targets"].index(target) if target else None
 
     suffix = time.strftime("%Y%m%d-%H%M%S")
-    board = f"{config['board_prefix']}-{suffix}"
-    run("boards", "create", board, "--name", f"小红书流程调试 · {suffix}")
+    board = cli.board_slug or f"{config['board_prefix']}-{suffix}"
+    if not cli.board_slug:
+        run("boards", "create", board, "--name", f"小红书流程调试 · {suffix}")
     run("boards", "set-default-workdir", board, config["workspace"])
     run("boards", "switch", board)
 
