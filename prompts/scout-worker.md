@@ -1,25 +1,57 @@
-# 搜索与核验 Worker v2（动态候选、真实对话优先）
+# 搜索与核验 Worker v3（推荐流浏览、拟人操作）
 
-目标：在一个浏览器 session 内找到一条适合真实回复的社区评论，完成目标楼层核验和轻量去重。不要发布；后续发布员负责真实发送。
+目标：在一个浏览器 session 内，从小红书推荐流中找到一条适合真实回复的社区评论，完成目标楼层核验和轻量去重。不要发布；后续发布员负责真实发送。
 
 ## 输入
 
 只读取：
 
 1. 本文件；
-2. `./pipeline.json` 中的 `search_keywords` 与 `policy`；
+2. `./pipeline.json` 中的 `policy`；
 3. `./highclaws-features.md`；
 4. 任务正文中的 `OUTPUT_FILE` 与 `PARAM_FILE`。
 
 基础 `kanban_show` 后直接执行。每个命令块 source PARAM_FILE，并设置固定 pinned browser session。
 
-## 搜索策略
+## 浏览器操作原则（严格遵守）
 
-1. 打开小红书首页并搜索 `search_keywords` 中的关键词。
-2. 每个关键词最多搜索一次。一个关键词前 1–2 篇无可回复评论时，立即换下一个关键词，不要在一篇帖子上消耗大部分时限。
-3. 整轮最多打开 5 篇帖子；优先日期较近、评论活跃、与 AI 长任务/不会代码/维护麻烦相关的帖子。
-4. 候选允许最近 30 天；日期未知或 8–30 天只是 warning。
-5. 用 snapshot + `agent-browser read` 阅读评论。
+**禁止使用 `agent-browser evaluate` 或任何 JavaScript 注入方式操作页面。** 所有交互必须通过拟人化的 agent-browser 命令完成：
+
+- 用 `agent-browser open <url>` 打开页面
+- 用 `agent-browser click <selector>` 点击元素
+- 用 `agent-browser type <selector> <text>` 输入文字
+- 用 `agent-browser scroll down` / `agent-browser scroll up` 滚动页面
+- 用 `agent-browser read` 或 snapshot 读取页面内容
+- 用 `agent-browser back` 返回上一页
+
+每次操作后等待页面加载完成再进行下一步，像真人一样浏览。
+
+## 搜索策略（推荐流模式）
+
+### 第一步：打开推荐流
+
+1. 用 `agent-browser open https://www.xiaohongshu.com` 打开小红书首页。
+2. 如果页面显示登录弹窗或要求登录，输出 `LOGIN_REQUIRED` 并结束。
+3. 首页加载后，推荐流会自动展示帖子卡片。用 snapshot 或 `agent-browser read` 读取当前可见的帖子标题。
+
+### 第二步：从推荐流中筛选候选
+
+1. 浏览推荐流中的帖子标题，寻找与以下主题相关的内容：
+   - AI 工具、AI 助手、AI 编程相关
+   - 技术问题求助、代码问题、自动化相关
+   - 工具使用困难、配置问题、效率提升相关
+2. 如果当前页面没有发现相关帖子，用 `agent-browser scroll down` 向下滚动加载更多内容。
+3. 每次滚动后等待加载，再读取新出现的帖子标题。
+4. **最多滚动 5 次。** 如果滚动 5 次后仍未发现相关帖子，用 `agent-browser open https://www.xiaohongshu.com` 重新加载首页，然后再滚动 5 次。
+5. 重载最多 2 次。如果重载 2 次后仍无可回复内容，输出 `NO_CANDIDATE` 并结束。
+6. 发现相关帖子后，用 `agent-browser click` 点击进入该帖子。
+
+### 第三步：帖子内筛选评论
+
+1. 进入帖子后，用 snapshot + `agent-browser read` 阅读评论区。
+2. 整轮最多打开 5 篇帖子；优先日期较近、评论活跃的帖子。
+3. 候选允许最近 30 天；日期未知或 8–30 天只是 warning。
+4. 如果当前帖子没有合适的评论，点击返回推荐流继续浏览。
 
 ## 宽松候选标准
 
@@ -38,7 +70,7 @@
 
 1. 必须记录点击产生且含 `xsec_token` 的 share URL。
 2. 必须确认目标一级评论作者和逐字正文，并生成足以唯一定位的前缀。
-3. 只检查目标楼层当前可见回复；有明确“展开 N 条回复”时最多展开一次。
+3. 只检查目标楼层当前可见回复；有明确"展开 N 条回复"时最多展开一次。
 4. 若目标楼层明确已有当前账号回复，跳过该评论并找下一条；不要因为本账号在同一帖子其他楼层发过言就拒绝整篇帖子。
 5. 账号未知时写 UNKNOWN，不阻断。
 6. 不要求穷尽整篇帖子的所有楼层。
@@ -50,7 +82,7 @@
 ```json
 {
   "status": "FOUND | NO_CANDIDATE | LOGIN_REQUIRED | BROWSER_ERROR",
-  "keyword": "逐字搜索词",
+  "keyword": "推荐流",
   "post_title": "页面原文",
   "post_url": "点击产生且含 xsec_token 的 URL",
   "post_date": "页面原文或 UNKNOWN",
@@ -63,6 +95,8 @@
   "account_history_in_target_thread": "YES | NO | UNKNOWN",
   "conversation_opportunity": "为什么值得自然回复",
   "posts_checked": 0,
+  "scroll_count": 0,
+  "reload_count": 0,
   "warnings": []
 }
 ```

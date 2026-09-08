@@ -47,13 +47,20 @@ class QualityRoundtablePipelineTests(unittest.TestCase):
         prompt = (ROOT / "prompts/scout-worker.md").read_text(encoding="utf-8")
         self.assertIn("相关的疑问、追问、经验交流、赞同或兴趣表达", prompt)
         self.assertIn("不要求必须是强烈痛点", prompt)
-        self.assertIn("换下一个关键词", prompt)
+        self.assertIn("推荐流", prompt)
 
-    def test_scout_prefers_candidates_that_need_only_one_short_angle(self) -> None:
+    def test_scout_uses_human_like_browser_operations(self) -> None:
         prompt = (ROOT / "prompts/scout-worker.md").read_text(encoding="utf-8")
-        self.assertIn("一句话只完成一个方面", prompt)
-        self.assertIn("不需要同时完成共情、解释、建议和追问", prompt)
-        self.assertIn("事实问题", prompt)
+        self.assertIn("禁止使用", prompt)
+        self.assertIn("evaluate", prompt)
+        self.assertIn("拟人化", prompt)
+        self.assertIn("agent-browser scroll down", prompt)
+
+    def test_scout_browses_recommendation_feed(self) -> None:
+        prompt = (ROOT / "prompts/scout-worker.md").read_text(encoding="utf-8")
+        self.assertIn("推荐流", prompt)
+        self.assertIn("scroll down", prompt)
+        self.assertIn("重新加载首页", prompt)
 
     def test_review_enforces_length_necessity_not_formula(self) -> None:
         prompt = (ROOT / "prompts/review-worker.md").read_text(encoding="utf-8")
