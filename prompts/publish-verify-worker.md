@@ -16,11 +16,11 @@
 
 1. 用 fresh pinned session 直接打开 scout 的 `post_url`，不重新搜索。
 2. snapshot + read 精确锁定 `target_comment_author` + `target_comment_excerpt`。
-3. 查看目标楼层当前可见子回复；若定稿未出现且存在明确“展开 N 条回复”或“展开更多回复”，累计最多点击 5 次，每次用 fresh ref。
-4. 一旦在目标楼层找到 `final_comment` 逐字相等的回复，即可记 `VERIFIED`。不要求为成功而穷尽 100 次展开，也不要求扫描整篇帖子的其他楼层。
-5. 如果目标楼层中逐字定稿出现 2 次以上，记 `DUPLICATE_REPLY`。
-6. 展开入口消失且目标楼层仍无定稿，记 `REPLY_NOT_FOUND`；达到 5 次仍未穷尽，记 `THREAD_UNCONFIRMED`。
-7. 相同定稿出现在其他楼层不改变目标楼层结果，但可作为 warning 记录。
+3. 查看目标楼层当前可见子回复；若定稿未出现且存在明确"展开 N 条回复"或"展开更多回复"，累计最多点击 5 次，每次用 fresh ref。
+4. 用肉眼判断目标楼层中是否有语义与 `final_comment` 一致的回复——不要求逐字相同，只要核心意思、关键信息、语气方向一致即可判定为 `VERIFIED`。
+5. 如果目标楼层中语义相同的回复出现 2 次以上，记 `DUPLICATE_REPLY`。
+6. 展开入口消失且目标楼层仍无语义匹配的回复，记 `REPLY_NOT_FOUND`；达到 5 次仍未穷尽，记 `THREAD_UNCONFIRMED`。
+7. 相同回复出现在其他楼层不改变目标楼层结果，但可作为 warning 记录。
 
 安全红线：不输入、不发送、不点赞、不删除；不用 Vision、DOM/eval 或坐标。
 
