@@ -15,7 +15,9 @@ logs/
 # 运行时状态文件 — 每轮调度生成，不是源代码
 current-run.json
 target-rotation-state.json
+full-e2e-current.json
 runtime-params/
+roundtable/e2e-*
 
 # 敏感信息
 .env

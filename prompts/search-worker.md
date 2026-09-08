@@ -102,9 +102,15 @@ agent-browser snapshot -i -c
 
 详情 URL 必须由点击产生并含 `xsec_token`；否则返回后用最新标题 ref 重试一次，仍失败则 `TOKEN_URL_MISSING`。
 
-## 5. 评论判断——最多一次滚动
+## 5. 评论判断——最多一次滚动 + read
 
-详情 snapshot 后，只允许一次：
+详情 snapshot 后，先执行一次 `agent-browser read` 读取已渲染但缺失于 a11y tree 的评论正文、作者顺序和底部回复上下文：
+
+```bash
+agent-browser read
+```
+
+若 `read` 输出为空或与 snapshot 无差异，再允许一次：
 
 ```bash
 agent-browser scroll down 500
@@ -112,10 +118,12 @@ agent-browser wait 500
 agent-browser snapshot -i -c
 ```
 
-机械判定：
+然后对新 snapshot 再执行一次 `agent-browser read`。
 
-- `这是一片荒地`、`暂无评论`，或只有“点击评论”/输入框而没有评论楼层：`NO_CANDIDATE`，原因写 `NO_COMMENTS`。
-- 有评论楼层，但正文或日期未出现在 snapshot：`NO_CANDIDATE`，原因写 `COMMENT_TEXT_UNREADABLE`。
+结合 snapshot 和 read 输出机械判定：
+
+- `这是一片荒地`、`暂无评论`，或只有"点击评论"/输入框而没有评论楼层：`NO_CANDIDATE`，原因写 `NO_COMMENTS`。
+- 有评论楼层，但 read 和 snapshot 都无法读出评论正文或日期：`NO_CANDIDATE`，原因写 `COMMENT_TEXT_UNREADABLE`。
 - 有 7 天内、表达痛点/求助/疑问的文字评论：记录作者和逐字文本。
 - 目标旁有“展开 N 条回复”时，必须点击最新 ref、等待 800ms、重新 snapshot；看到“收起回复”或子回复才算展开。未展开则 `THREAD_UNCONFIRMED`。
 - 当前账号未知时不得声称确定没有我方回复；使用 `THREAD_UNCONFIRMED`，把候选交给后续独立验证。

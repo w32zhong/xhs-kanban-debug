@@ -92,6 +92,8 @@ agent-browser snapshot -i -c
 
 只允许最多两次 `scroll down 500`，每次重新 snapshot。不得把 snapshot 写入 `/tmp`，不得用 grep/awk/sed 二次解析，直接阅读工具输出。
 
+**优先使用 `agent-browser read` 获取页面可读文本。** 当 snapshot 只暴露作者和 action row、没有评论正文时，先执行一次 `agent-browser read`。它能读取已渲染但缺失于 a11y tree 的评论正文、作者顺序和底部回复上下文。只有 read 也无法获取正文时，才进入下方的单次视觉取证路径。
+
 依次记录：帖子标题、作者、可见发布日期，以及评论区状态：
 
 1. 明确看到“这是一片荒地”或“暂无评论”：`NO_COMMENTS_CONFIRMED`。
