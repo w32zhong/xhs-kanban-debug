@@ -88,9 +88,14 @@ def main() -> None:
         for key in ("keyword", "target_title", "target_comment_author", "target_comment_excerpt"):
             task[key] = selected_target[key]
 
-    guard = subprocess.run([sys.executable, str(ROOT / "resource_guard.py")], text=True)
+    guard = subprocess.run(
+        [sys.executable, str(ROOT / "resource_guard.py")],
+        text=True, capture_output=True,
+    )
     if guard.returncode:
         raise SystemExit("browser resource guard failed; refusing to start another iteration")
+    if guard.stdout:
+        print(guard.stdout, file=sys.stderr)
 
     # Pick from target pool if available and not overridden by --target-id.
     # The pool's presence in the project implies targets should be used.
