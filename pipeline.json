@@ -2,7 +2,7 @@
   "stage": "dynamic-e2e-quality-roundtable-v3",
   "board_prefix": "xhs-run",
   "workspace": ".",
-  "default_assignee": "agent-6ef809b5bf450f39",
+  "default_assignee": "",
   "target_source": "dynamic_search",
   "search_keywords": [
     "AI长任务中断怎么办",
@@ -40,7 +40,7 @@
       "parents": ["scout"],
       "body_vars": {
         "INPUT_FILE": "runtime/scout-result.json",
-        "REVIEWER_FOCUS": "接住具体焦虑、帮助价值、可执行性、自然口语",
+        "REVIEWER_FOCUS": "帮助价值、可执行性、自然口语",
         "OUTPUT_FILE": "runtime/reviewer-a.json"
       }
     },
@@ -52,7 +52,7 @@
       "parents": ["scout"],
       "body_vars": {
         "INPUT_FILE": "runtime/scout-result.json",
-        "REVIEWER_FOCUS": "事实边界、零营销、安全、好奇心与互动意愿",
+        "REVIEWER_FOCUS": "事实边界、零营销、自然口语",
         "OUTPUT_FILE": "runtime/reviewer-b.json"
       }
     },
