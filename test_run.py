@@ -118,6 +118,30 @@ class BoardTests(unittest.TestCase):
             "--default-workdir", "/tmp/project", "--switch",
         )])
 
+    def test_archive_visible_tasks_archives_every_status(self) -> None:
+        tasks = [
+            {"id": "triage-1", "status": "triage"},
+            {"id": "active-1", "status": "running"},
+            {"id": "blocked-1", "status": "blocked"},
+            {"id": "done-1", "status": "done"},
+            {"id": "failed-1", "status": "failed"},
+        ]
+        calls: list[tuple[str, ...]] = []
+        proc = type("P", (), {"returncode": 0, "stdout": "", "stderr": ""})()
+        with patch.object(run, "list_tasks", return_value=tasks), patch.object(
+            run, "command", side_effect=lambda args, **_: calls.append(tuple(args)) or proc
+        ):
+            run.archive_visible_tasks("xhs-run")
+        self.assertEqual(calls, [(
+            "hermes", "kanban", "--board", "xhs-run", "archive",
+            "triage-1", "active-1", "blocked-1", "done-1", "failed-1",
+        )])
+
+    def test_archive_visible_tasks_does_not_call_archive_for_empty_board(self) -> None:
+        with patch.object(run, "list_tasks", return_value=[]), patch.object(run, "command") as command:
+            run.archive_visible_tasks("xhs-run")
+        command.assert_not_called()
+
     def test_wait_for_board_ignores_historical_running_tasks(self) -> None:
         cfg = run.RunnerConfig(profile="worker", workspace=Path("/tmp/project"), account_name="me", poll_seconds=1, timeout_minutes=1)
         state = {"created": [{"key": "scout", "id": "current"}]}
@@ -340,10 +364,25 @@ class SemanticGateTests(unittest.TestCase):
 
 
 class RunnerFinallyTests(unittest.TestCase):
+    def test_campaign_prepares_then_archives_before_starting_iteration(self) -> None:
+        cfg = run.RunnerConfig(profile="worker", workspace=Path("/tmp/workspace"), account_name="test-account")
+        calls: list[str] = []
+        with patch.object(run, "prepare_board", side_effect=lambda *_: calls.append("prepare")), patch.object(
+            run, "archive_visible_tasks", side_effect=lambda *_: calls.append("archive")
+        ), patch.object(
+            run, "start_iteration", side_effect=lambda *_args, **_kwargs: calls.append("start") or {"board": "xhs-run", "created": []}
+        ), patch.object(run, "wait_for_board", return_value=[]), patch.object(
+            run, "compact_result", return_value={"status": "COMPLETED"}
+        ), patch.object(run, "cleanup_browser_tabs", return_value={}), patch.object(
+            run, "cleanup_new_runtime_files", return_value={}
+        ), patch.object(run, "snapshot_runtime_files", return_value=set()), patch.object(run, "runner_lock"):
+            run.execute_campaign(Path("/tmp/project"), cfg)
+        self.assertEqual(calls, ["prepare", "archive", "start"])
+
     def test_cleanup_runs_when_iteration_raises(self) -> None:
         cfg = run.RunnerConfig(profile="worker", workspace=Path("/tmp/workspace"), account_name="test-account", poll_seconds=1, timeout_minutes=1)
         calls: list[str] = []
-        with patch.object(run, "prepare_board"), patch.object(run, "start_iteration", side_effect=RuntimeError("boom")), patch.object(
+        with patch.object(run, "prepare_board"), patch.object(run, "archive_visible_tasks"), patch.object(run, "start_iteration", side_effect=RuntimeError("boom")), patch.object(
             run, "cleanup_browser_tabs", side_effect=lambda *_: calls.append("tabs") or {}
         ), patch.object(run, "cleanup_new_runtime_files", side_effect=lambda *_: calls.append("files") or {}), patch.object(
             run, "snapshot_runtime_files", return_value=set()

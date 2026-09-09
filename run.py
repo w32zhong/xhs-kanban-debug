@@ -136,6 +136,13 @@ def list_tasks(board: str) -> list[dict[str, Any]]:
     return json.loads(proc.stdout)
 
 
+def archive_visible_tasks(board: str) -> None:
+    """Archive every currently visible card while preserving board history."""
+    task_ids = [task_id for task in list_tasks(board) if isinstance(task_id := task.get("id"), str) and task_id]
+    if task_ids:
+        command(["hermes", "kanban", "--board", board, "archive", *task_ids])
+
+
 def board_is_terminal(tasks: list[dict[str, Any]], current_task_ids: set[str]) -> bool:
     """Return whether every task created by this iteration has terminated."""
     if not current_task_ids:
@@ -406,6 +413,7 @@ def execute_campaign(root: Path, cfg: RunnerConfig, *, pipeline_config: Path | N
     try:
         with runner_lock(root):
             prepare_board(cfg.board_slug, cfg.workspace)
+            archive_visible_tasks(cfg.board_slug)
             state = start_iteration(root, cfg, pipeline_config=pipeline_config)
             started_board = state.get("board")
             if not isinstance(started_board, str) or not started_board:
