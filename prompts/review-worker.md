@@ -6,15 +6,20 @@
 
 1. `./runtime/scout-result.json`（任务正文 `INPUT_FILE`）；
 2. `./highclaws-features.md`；
-3. `./prompts/xhs-reply-style.md`；
-4. 本文件；
-5. 任务正文中的 `REVIEWER_FOCUS` 与 `OUTPUT_FILE`。
+3. `./prompts/xhs-reply-话术-原典.md`；
+4. `./prompts/xhs-reply-style.md`；
+5. 本文件；
+6. 任务正文中的 `REVIEWER_FOCUS` 与 `OUTPUT_FILE`。
 
 不得读取旧案例、静态 target pool、旧 roundtable 文件或旧任务结果。候选事实只能来自本轮 `runtime/scout-result.json`。
 
 ## 先写短，再判断
 
-必须严格执行 `./prompts/xhs-reply-style.md`：
+先完整阅读 `./prompts/xhs-reply-话术-原典.md`。它是用户长期沉淀并逐字保留的原典：关键词对应话术、语气、表情、打直球判断和具体句子都应作为真实创作参考，不能因为已有加工版就跳过、贬低或擅自改写原典文件。
+
+再结合 `./prompts/xhs-reply-style.md` 执行长度、真实性和发布安全门槛。加工版用于解释怎样选择和收敛原典素材，不是替代原典。优先吸收原典中的措辞习惯和接话方式；贴合目标时可以直接选用或轻微改写其中一句，但不要机械拼接多个套话。
+
+必须严格执行两份规范：
 
 - 默认一两句；
 - 最多 3 句话；

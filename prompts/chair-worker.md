@@ -8,15 +8,20 @@
 2. `./runtime/reviewer-a.json`；
 3. `./runtime/reviewer-b.json`；
 4. `./highclaws-features.md`；
-5. `./prompts/xhs-reply-style.md`；
-6. 本文件；
-7. 任务正文中的 `OUTPUT_FILE`。
+5. `./prompts/xhs-reply-话术-原典.md`；
+6. `./prompts/xhs-reply-style.md`；
+7. 本文件；
+8. 任务正文中的 `OUTPUT_FILE`。
 
 不得读取旧案例、静态 target pool 或旧任务结果。
 
 ## 短回复是硬门槛
 
-最终 `final_comment` 必须遵守 `./prompts/xhs-reply-style.md`：
+先完整阅读 `./prompts/xhs-reply-话术-原典.md`。该文件是用户长期沉淀、逐字保留的原典，不得把它当作过时案例或被加工版取代。定稿时应主动参考原典的关键词话术、口语节奏、情绪表达和打直球例句；贴合目标时可以直接选用或轻微改写一句。
+
+`./prompts/xhs-reply-style.md` 是对原典的执行解释与安全收敛，不是替代品。若委员稿没有体现原典的人味和措辞习惯，应在不增加第二个观点的前提下重写。
+
+最终 `final_comment` 必须同时遵守两份规范：
 
 - 默认 1–2 句话；
 - 绝不超过 3 句话；

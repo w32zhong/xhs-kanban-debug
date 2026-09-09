@@ -152,7 +152,23 @@ class QualityRoundtablePipelineTests(unittest.TestCase):
         self.assertIn("打钳", guide)
         self.assertIn("小范围内测", guide)
         self.assertNotIn("old-xhs-docs", guide)
-        self.assertNotIn("xhs-reply-话术.md", guide)
+
+    def test_original_reply_playbook_is_preserved_verbatim(self) -> None:
+        import hashlib
+
+        playbook = ROOT / "prompts/xhs-reply-话术-原典.md"
+        self.assertTrue(playbook.is_file())
+        digest = hashlib.sha256(playbook.read_bytes()).hexdigest()
+        self.assertEqual(digest, "4eea6f67076c3966d9c182e7ca506e24fa8a9d9d614c09f4f0daf3e8b3f30a8d")
+
+    def test_writing_workers_read_original_playbook_before_interpretation(self) -> None:
+        for name in ("review-worker.md", "chair-worker.md"):
+            prompt = (ROOT / "prompts" / name).read_text(encoding="utf-8")
+            self.assertIn("./prompts/xhs-reply-话术-原典.md", prompt)
+            self.assertIn("原典", prompt)
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        self.assertIn("xhs-reply-话术-原典.md", readme)
+        self.assertIn("逐字", readme)
 
     def test_reviewers_must_follow_short_reply_guide(self) -> None:
         prompt = (ROOT / "prompts/review-worker.md").read_text(encoding="utf-8")

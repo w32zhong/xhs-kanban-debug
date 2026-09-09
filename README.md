@@ -191,7 +191,8 @@ Dispatcher 会在父任务完成后自动推进 blocked 子任务，无需手动
 - `prompts/verify-worker.md`：独立验证 worker（含 `agent-browser read` 优先）。
 - `prompts/review-worker.md`：圆桌委员 worker（纯文本，按本地短回复规范生成默认 1–2 句话）。
 - `prompts/chair-worker.md`：委员长 worker（纯文本，执行最多 3 句话、1 个关键点的终审）。
-- `prompts/xhs-reply-style.md`：仓库内自包含的小红书短回复规范；不依赖仓库外文档。
+- `prompts/xhs-reply-话术-原典.md`：从用户长期维护的 `old-xhs-docs/xhs-reply-话术.md` 逐字复制的原始话术资产；写稿与定稿 Agent 必须完整阅读。原典不做“优化式覆盖”，自动测试用 SHA-256 防止无意删改。
+- `prompts/xhs-reply-style.md`：在原典之上的执行解释，负责长度、真实性和发布安全收敛；它补充原典，但不取代原典。
 - `prompts/publish-send-worker.md`：发布 worker（搜索→定位→绑定→输入→发送，一步完成）。
 - `prompts/publish-verify-worker.md`：发布后独立复核。
 
