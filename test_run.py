@@ -11,15 +11,16 @@ import run
 
 
 class ConfigTests(unittest.TestCase):
-    def test_cli_overrides_profile_and_workspace(self) -> None:
+    def test_cli_overrides_profile_workspace_and_account(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             config_path = root / "runner-config.json"
-            config_path.write_text(json.dumps({"profile": "from-file", "workspace": ".", "board_slug": "xhs-run"}))
-            cfg = run.load_config(root, config_path, profile="from-cli", workspace=str(root / "project"))
+            config_path.write_text(json.dumps({"profile": "from-file", "workspace": ".", "board_slug": "xhs-run", "account_name": "from-file-account"}))
+            cfg = run.load_config(root, config_path, profile="from-cli", workspace=str(root / "project"), account_name="from-cli-account")
             self.assertEqual(cfg.profile, "from-cli")
             self.assertEqual(cfg.workspace, (root / "project").resolve())
             self.assertEqual(cfg.board_slug, "xhs-run")
+            self.assertEqual(cfg.account_name, "from-cli-account")
 
     def test_relative_workspace_is_resolved_from_config_directory(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -27,7 +28,7 @@ class ConfigTests(unittest.TestCase):
             config_dir = root / "config"
             config_dir.mkdir()
             config_path = config_dir / "runner.json"
-            config_path.write_text(json.dumps({"profile": "worker", "workspace": "../project"}))
+            config_path.write_text(json.dumps({"profile": "worker", "workspace": "../project", "account_name": "me"}))
             cfg = run.load_config(root, config_path)
             self.assertEqual(cfg.workspace, (root / "project").resolve())
 
@@ -35,8 +36,29 @@ class ConfigTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             config_path = root / "runner.json"
-            config_path.write_text(json.dumps({"profile": "worker", "workspace": "."}))
+            config_path.write_text(json.dumps({"profile": "worker", "workspace": ".", "account_name": "me"}))
             self.assertEqual(run.load_config(root, config_path).poll_seconds, 3)
+    def test_default_profile_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config_path = root / "runner.json"
+            config_path.write_text(json.dumps({"profile": "default", "workspace": ".", "account_name": "me"}))
+            with self.assertRaisesRegex(ValueError, "default profile is not allowed"):
+                run.load_config(root, config_path)
+
+    def test_missing_account_name_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config_path = root / "runner.json"
+            config_path.write_text(json.dumps({"profile": "worker", "workspace": "."}))
+            with self.assertRaisesRegex(ValueError, "account name is required"):
+                run.load_config(root, config_path)
+
+    def test_scout_only_flag_uses_isolated_pipeline_and_board(self) -> None:
+        with patch("sys.argv", ["run.py", "--scout-only"]):
+            args = run.parse_args()
+        self.assertTrue(args.scout_only)
+        self.assertIsNone(args.pipeline_config)
 
 
 class CleanupTests(unittest.TestCase):
@@ -230,7 +252,7 @@ class SemanticGateTests(unittest.TestCase):
 
 class RunnerFinallyTests(unittest.TestCase):
     def test_cleanup_runs_when_iteration_raises(self) -> None:
-        cfg = run.RunnerConfig(profile="worker", workspace=Path("/tmp/workspace"), poll_seconds=1, timeout_minutes=1)
+        cfg = run.RunnerConfig(profile="worker", workspace=Path("/tmp/workspace"), account_name="test-account", poll_seconds=1, timeout_minutes=1)
         calls: list[str] = []
         with patch.object(run, "prepare_board"), patch.object(run, "start_iteration", side_effect=RuntimeError("boom")), patch.object(
             run, "cleanup_browser_tabs", side_effect=lambda *_: calls.append("tabs") or {}

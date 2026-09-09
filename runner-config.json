@@ -1,6 +1,7 @@
 {
-  "profile": "agent-6ef809b5bf450f39",
-  "workspace": "/worktrees/folder-1/xhs-kanban-workflow",
+  "profile": "",
+  "workspace": ".",
+  "account_name": "",
   "board_slug": "xhs-run",
   "poll_seconds": 3,
   "timeout_minutes": 30,

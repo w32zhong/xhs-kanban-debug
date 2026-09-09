@@ -1,0 +1,32 @@
+{
+  "stage": "scout-only-refresh-fast-v1",
+  "board_prefix": "xhs-scout",
+  "workspace": ".",
+  "default_assignee": "",
+  "target_source": "dynamic_search",
+  "max_parallel": 1,
+  "policy": {
+    "candidate_max_age_days": 30,
+    "max_posts_checked": 2,
+    "max_feed_scrolls": 2,
+    "max_home_reopens": 1,
+    "require_exact_target_floor": true,
+    "require_no_exact_duplicate_in_target_thread": true,
+    "current_account_source": "runtime_parameter",
+    "login_signal": "SIDEBAR_SELF_ENTRY",
+    "vision_calls": 0,
+    "stop_at_first_reply_free_candidate": true
+  },
+  "tasks": [
+    {
+      "key": "scout",
+      "name": "1️⃣ 搜索与核验·快速迭代",
+      "prompt": "prompts/scout-worker.md",
+      "max_runtime": "6m",
+      "parents": [],
+      "body_vars": {
+        "OUTPUT_FILE": "runtime/scout-result.json"
+      }
+    }
+  ]
+}

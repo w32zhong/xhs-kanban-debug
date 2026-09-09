@@ -1,79 +1,169 @@
-# 搜索与核验 Worker v3（推荐流浏览、拟人操作）
+# 搜索与核验 Worker v4（刷新推荐流、首个合格目标立即返回）
 
-目标：在一个浏览器 session 内，从小红书推荐流中找到一条适合真实回复的社区评论，完成目标楼层核验和轻量去重。不要发布；后续发布员负责真实发送。
+## 唯一目标
 
-## 输入
+在一个固定 browser session 内，从小红书首页推荐流找到**第一个**适合自然回复、且目标楼层没有账号 `ACCOUNT_NAME_LITERAL` 回复的一级评论。只侦察和核验，不发布。
+
+这是一项有界的快速任务，不是调研任务。找到第一个合格目标后必须立即结束，不寻找“更优目标”。
+
+## 输入与固定参数
 
 只读取：
 
 1. 本文件；
-2. `./pipeline.json` 中的 `policy`；
-3. `./highclaws-features.md`；
-4. 任务正文中的 `OUTPUT_FILE` 与 `PARAM_FILE`。
+2. 任务正文中的 `OUTPUT_FILE` 与 `PARAM_FILE`。
 
-基础 `kanban_show` 后直接执行。每个命令块 source PARAM_FILE，并设置固定 pinned browser session。
+不要读取 `pipeline.json`、`highclaws-features.md` 或任何其他文件；本任务所需策略已完整写在本文件中。
 
-## 浏览器操作原则（严格遵守）
+先调用原生 `kanban_show` 工具一次，然后直接工作。禁止使用 terminal 运行 `hermes kanban show/complete`。结束时必须调用原生 `kanban_complete` 工具。每个 browser 命令块都 source `PARAM_FILE`，并使用 `SESSION_NAME` 作为固定 pinned browser session。
 
-**禁止使用 `agent-browser evaluate` 或任何 JavaScript 注入方式操作页面。** 所有交互必须通过拟人化的 agent-browser 命令完成：
+`PARAM_FILE` 必须提供：
 
-- 用 `agent-browser open <url>` 打开页面
-- 用 `agent-browser click <selector>` 点击元素
-- 用 `agent-browser type <selector> <text>` 输入文字
-- 用 `agent-browser scroll down` / `agent-browser scroll up` 滚动页面
-- 用 `agent-browser read` 或 snapshot 读取页面内容
-- 用 `agent-browser back` 返回上一页
+```bash
+SESSION_NAME=...
+ACCOUNT_NAME_LITERAL='<运行时传入的当前账号昵称>'
+```
 
-每次操作后等待页面加载完成再进行下一步，像真人一样浏览。
+`ACCOUNT_NAME_LITERAL` 是本账号的权威昵称。不得通过个人主页、头像、UID、截图或 Vision 再确认账号身份。
 
-## 搜索策略（推荐流模式）
+## 禁止项与动作预算
 
-### 第一步：打开推荐流
+**禁止使用** `agent-browser evaluate`、JavaScript 注入或 DOM 探索；全部页面动作保持拟人化，并遵守以下更严格限制：
 
-1. 用 `agent-browser open https://www.xiaohongshu.com` 打开小红书首页。
-2. 如果页面显示登录弹窗或要求登录，输出 `LOGIN_REQUIRED` 并结束。
-3. 首页加载后，推荐流会自动展示帖子卡片。用 snapshot 或 `agent-browser read` 读取当前可见的帖子标题。
+- 禁止 screenshot；
+- 禁止 vision 或 `vision_analyze`；
+- 禁止 agent-browser --help；
+- 禁止进入个人主页、点击左侧栏“你”、hover 头像或离开帖子去确认账号；
+- 禁止为了“找到更好的目标”继续读取其他评论；
+- 禁止扫描整篇帖子的全部评论或全部回复；
+- 禁止项目环境、Hermes CLI、Python import、SQLite、git、pwd、env、`which`、目录搜索等探索；
+- 禁止创建临时 snapshot/read 文件后再 grep、sed、awk；直接阅读工具输出。
 
-### 第二步：从推荐流中筛选候选
+硬预算：
 
-1. 浏览推荐流中的帖子标题，寻找与以下主题相关的内容：
-   - AI 工具、AI 助手、AI 编程相关
-   - 技术问题求助、代码问题、自动化相关
-   - 工具使用困难、配置问题、效率提升相关
-2. 如果当前页面没有发现相关帖子，用 `agent-browser scroll down` 向下滚动加载更多内容。
-3. 每次滚动后等待加载，再读取新出现的帖子标题。
-4. **最多滚动 5 次。** 如果滚动 5 次后仍未发现相关帖子，用 `agent-browser open https://www.xiaohongshu.com` 重新加载首页，然后再滚动 5 次。
-5. 重载最多 2 次。如果重载 2 次后仍无可回复内容，输出 `NO_CANDIDATE` 并结束。
-6. 发现相关帖子后，用 `agent-browser click` 点击进入该帖子。
+- 推荐流最多向下滚动 2 次；
+- 最多重新打开首页 1 次；
+- 整轮最多打开 2 篇帖子；
+- 每个目标楼层最多点击一次“展开 N 条回复”；
+- 不执行与最终 `FOUND`/`NO_CANDIDATE` 证据无关的动作。
 
-### 第三步：帖子内筛选评论
+预算耗尽后立即输出 `NO_CANDIDATE`，不得自行扩大范围。
 
-1. 进入帖子后，用 snapshot + `agent-browser read` 阅读评论区。
-2. 整轮最多打开 5 篇帖子；优先日期较近、评论活跃的帖子。
-3. 候选允许最近 30 天；日期未知或 8–30 天只是 warning。
-4. 如果当前帖子没有合适的评论，点击返回推荐流继续浏览。
+## 浏览器允许操作
 
-## 宽松候选标准
+只使用以下拟人化命令：
 
-可以选择与帖子主题相关的一级评论，包括：
+- `agent-browser open <url>`
+- `agent-browser reload`
+- `agent-browser snapshot`
+- `agent-browser read`
+- `agent-browser click <selector-or-ref>`
+- `agent-browser scroll down`
+- `agent-browser back`
+- `agent-browser get url`
+- 必要的短 `agent-browser wait <ms>`
 
-- 明确困难、求助或问题；
+每次点击前使用 fresh snapshot，避免过期 ref。不要猜坐标。
+
+## 快速状态机
+
+必须严格按顺序执行，不得增加旁路。
+
+### S1：打开首页并判断登录
+
+1. `agent-browser open https://www.xiaohongshu.com/`。
+2. 等待页面稳定后做一次 fresh snapshot。
+3. **仅用左侧栏个人入口判断登录，不点击：**
+   - snapshot 中左侧栏出现个人入口“我”（即用户所说的“你”所在入口）：视为已登录，继续；
+   - 左侧栏没有“我”，并出现登录按钮、登录弹窗或扫码登录：输出 `LOGIN_REQUIRED`；
+   - 不得因为没有字面“你”而拒绝；当前小红书桌面端实测标签是“我”。
+4. 不允许点击“我”或“你”，不允许进入个人主页。
+5. `current_account` 固定写入 `ACCOUNT_NAME_LITERAL`，即运行时传入的当前账号昵称。
+
+### S2：先刷新推荐流
+
+1. 登录确认后，**先刷新推荐流**：执行一次 `agent-browser reload`，等待页面稳定。
+2. 刷新完成前禁止进入帖子。
+3. 刷新后做 fresh snapshot 或 `agent-browser read`，只读取当前可见推荐卡片。
+4. 目的：让平台算法重新拉取推荐内容，降低反复进入已看或已评论帖子的概率。
+
+### S3：按页面顺序选择帖子
+
+从刷新后的推荐流按页面顺序寻找与下列主题相关的第一篇帖子：
+
+- AI 工具、AI 助手、AI 编程；
+- 技术或代码问题；
+- 自动化、配置、持续运行、效率；
+- 工具使用困难、求助或经验交流。
+
+规则：
+
+1. 不做关键词搜索。
+2. 当前可见区域无相关帖子时向下滚动一次，再读取新卡片；最多滚动 2 次。
+3. 仍无候选时只允许**重新加载首页**一次：`agent-browser open https://www.xiaohongshu.com/`，再检查首屏；不得再次 reload。
+4. 点击页面顺序中的第一篇相关帖子，不比较热度，不寻找“更优帖子”。
+5. 每次打开帖子都将 `posts_checked` 加一；最多打开 2 篇。
+
+### S4：帖子内选择第一个有内容价值的一级评论
+
+进入帖子后：
+
+1. 获取点击产生且包含 `xsec_token` 的当前 URL。
+2. 做一次 fresh snapshot，再用一次 `agent-browser read` 读取帖子和当前可见评论。
+3. 从页面上到下检查一级评论。**第一个通过内容门槛的评论就是目标。**
+
+内容门槛宽松：
+
+- 明确困难、求助、问题或追问；
 - 相关的疑问、追问、经验交流、赞同或兴趣表达；
-- 简短但可以自然补充一个实用建议的评论；
-- 对方法、工具、持续运行、配置难度表现出好奇的评论。
+- 简短但可自然补充一个实用建议；
+- 对方法、工具、配置或持续运行表现出好奇。
 
-**不要求必须是强烈痛点。** 只要能够给出自然、真实、有信息增量且不营销的回复，就可以 `FOUND`。不要因为评论语气轻松、需求不够商业化、付费意愿未知而拒绝。
+只有纯表情、无语义灌水、攻击争吵、完全无关内容才跳过。**不要求必须是强烈痛点。**
 
-明显只有表情、无语义灌水、攻击争吵、与主题完全无关，才跳过。
+若帖子没有任何合格一级评论，立即返回推荐流并打开下一篇相关帖子。不要重复读取同一帖子。
 
-## 精确定位与去重
+### S5：只核验目标楼层，然后立即早停
 
-1. 必须记录点击产生且含 `xsec_token` 的 share URL。
-2. 必须确认目标一级评论作者和逐字正文，并生成足以唯一定位的前缀。
-3. 只检查目标楼层当前可见回复；有明确"展开 N 条回复"时最多展开一次。
-4. 若目标楼层明确已有当前账号回复，跳过该评论并找下一条；不要因为本账号在同一帖子其他楼层发过言就拒绝整篇帖子。
-5. 账号未知时写 UNKNOWN，不阻断。
-6. 不要求穷尽整篇帖子的所有楼层。
+对 S4 找到的第一个目标评论：
+
+1. 记录作者、逐字正文、日期和唯一定位前缀。
+2. 只看这个目标楼层周围当前可见的回复。
+3. 若有明确“展开 N 条回复”，最多点击一次，然后做一次 fresh snapshot/read。
+4. 在该楼层回复中查找精确昵称 `ACCOUNT_NAME_LITERAL`：
+   - 看到该昵称：此评论视为已回复；立即检查**同一帖子里的下一条合格一级评论**。
+   - 没看到该昵称：立即 `FOUND`。
+5. 对下一条合格评论重复同样的单楼层检查。找到第一个没有 `ACCOUNT_NAME_LITERAL` 回复的评论就立即 `FOUND`。
+6. 如果当前帖子所有已检查的合格评论都已回复，才返回推荐流检查下一篇帖子。
+
+**立即早停是硬规则：**
+
+- 一旦目标楼层未发现 `ACCOUNT_NAME_LITERAL`，立即 FOUND；
+- 禁止继续读取其他评论；
+- 禁止继续打开其他帖子；
+- 禁止比较是否还有更优目标；
+- 禁止扫描本账号在同一帖子其他楼层的历史；
+- 禁止为了提高置信度重复 snapshot/read；
+- 不要求穷尽整篇帖子的所有楼层。
+
+## 精确结果规则
+
+`FOUND` 的硬门槛只有：
+
+1. 精确帖子标题；
+2. 点击产生且含 `xsec_token` 的 URL；
+3. 精确一级评论作者；
+4. 可读的逐字评论正文；
+5. 可以给出相关、有帮助且不营销的回复；
+6. 展开目标楼层一次后，或目标楼层没有展开入口时，未看到精确账号名 `ACCOUNT_NAME_LITERAL`。
+
+不要因为以下情况阻断：
+
+- 帖子日期未知；
+- 评论日期未知；
+- 同一帖子其他楼层可能出现过本账号；
+- 评论不是强烈痛点；
+- 无法从个人主页确认 UID——个人主页本来就禁止访问。
 
 ## 输出
 
@@ -90,17 +180,34 @@
   "target_comment_text": "逐字全文",
   "target_comment_excerpt": "唯一定位前缀",
   "target_comment_date": "页面原文或 UNKNOWN",
-  "current_account": "页面昵称或 UNKNOWN",
-  "target_thread_duplicate": "YES | NO | UNKNOWN",
-  "account_history_in_target_thread": "YES | NO | UNKNOWN",
-  "conversation_opportunity": "为什么值得自然回复",
+  "current_account": "ACCOUNT_NAME_LITERAL 的实际值",
+  "login_signal": "SIDEBAR_SELF_ENTRY",
+  "target_thread_duplicate": "YES | NO",
+  "account_history_in_target_thread": "YES | NO",
+  "conversation_opportunity": "为什么值得自然回复，最多两句",
   "posts_checked": 0,
+  "comments_checked": 0,
   "scroll_count": 0,
-  "reload_count": 0,
+  "reload_count": 1,
+  "timeline_refreshed": true,
   "warnings": []
 }
 ```
 
-`FOUND` 的硬门槛只有：精确帖子、含 token URL、精确作者、可读评论、可以给出相关且有帮助的真实回复、目标楼层没有明确重复触达。
+状态约定：
 
-完成后立即 `kanban_complete`，metadata 至少包含 `status`、`output_file`、`post_title`、`target_comment_author`。禁止创建新卡。
+- 找到目标：`target_thread_duplicate=NO`，`account_history_in_target_thread=NO`。
+- 某条评论已有本账号回复但后来找到下一条：最终结果只记录被选中的未回复目标；可在 warnings 简短记录跳过数量。
+- 预算耗尽：`NO_CANDIDATE`。
+
+完成后立即 `kanban_complete`，metadata 至少包含：
+
+- `status`
+- `output_file`
+- `post_title`
+- `target_comment_author`
+- `posts_checked`
+- `comments_checked`
+- `timeline_refreshed`
+
+禁止创建新卡。

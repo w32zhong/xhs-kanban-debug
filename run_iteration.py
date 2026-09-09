@@ -15,7 +15,7 @@ import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
-CONFIG = json.loads((ROOT / "pipeline.json").read_text(encoding="utf-8"))
+DEFAULT_CONFIG_PATH = ROOT / "pipeline.json"
 POOL = json.loads((ROOT / "publish-target-pool.json").read_text(encoding="utf-8"))
 STATE_FILE = ROOT / "target-rotation-state.json"
 
@@ -55,15 +55,18 @@ def run(*args: str, json_output: bool = False) -> str | dict | list:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
+    parser.add_argument("--config", default=str(DEFAULT_CONFIG_PATH), help="Pipeline JSON to execute")
     parser.add_argument("--target-id", help="Override publish rehearsal literals from publish-target-pool.json")
     parser.add_argument("--finalize-input", help="Run deterministic finalize_run.py with this JSON input instead of creating a Kanban board")
     parser.add_argument("--dry-run", action="store_true", help="Pass --dry-run to deterministic finalizer")
     parser.add_argument("--profile", help="Override pipeline.json default_assignee")
     parser.add_argument("--workspace", help="Override pipeline.json workspace")
+    parser.add_argument("--account-name", required=True, help="Current Xiaohongshu account nickname for duplicate checks")
     parser.add_argument("--board-slug", help="Use a board already prepared by run.py")
     cli = parser.parse_args()
 
-    config = json.loads(json.dumps(CONFIG))
+    config_path = Path(cli.config).expanduser().resolve()
+    config = json.loads(config_path.read_text(encoding="utf-8"))
     if cli.profile:
         config["default_assignee"] = cli.profile
     if cli.workspace:
@@ -140,6 +143,8 @@ def main() -> None:
         approved_draft = target_data.get("approved_draft") or task.get("approved_draft", "")
 
         param_content = f"SESSION_NAME={shlex.quote(session_name)}\n"
+        if task["key"] == "scout":
+            param_content += f"ACCOUNT_NAME_LITERAL={shlex.quote(cli.account_name)}\n"
         if keyword:
             param_content += f"KEYWORD_LITERAL={shlex.quote(keyword)}\n"
         if target_title:

@@ -29,6 +29,7 @@ WAITING_STATUSES = {"triage", "todo", "scheduled", "ready", "blocked"}
 class RunnerConfig:
     profile: str
     workspace: Path
+    account_name: str
     board_slug: str = "xhs-run"
     poll_seconds: int = 3
     timeout_minutes: int = 45
@@ -42,6 +43,7 @@ def load_config(
     *,
     profile: str | None = None,
     workspace: str | None = None,
+    account_name: str | None = None,
     poll_seconds: int | None = None,
     timeout_minutes: int | None = None,
     keep_board: bool | None = None,
@@ -55,11 +57,17 @@ def load_config(
     if not workspace_path.is_absolute():
         workspace_path = config_dir / workspace_path
     resolved_profile = profile or os.environ.get("XHS_AGENT_PROFILE") or data.get("profile")
+    resolved_account = account_name or os.environ.get("XHS_ACCOUNT_NAME") or data.get("account_name")
     if not resolved_profile:
         raise ValueError("agent profile is required: set --profile, XHS_AGENT_PROFILE, or runner-config.json")
+    if resolved_profile == "default":
+        raise ValueError("default profile is not allowed; configure a dedicated worker profile")
+    if not resolved_account:
+        raise ValueError("account name is required: set --account-name, XHS_ACCOUNT_NAME, or runner-config.json")
     return RunnerConfig(
         profile=str(resolved_profile),
         workspace=workspace_path.resolve(),
+        account_name=str(resolved_account),
         board_slug=str(data.get("board_slug", "xhs-run")),
         poll_seconds=int(poll_seconds or data.get("poll_seconds", 3)),
         timeout_minutes=int(timeout_minutes or data.get("timeout_minutes", 45)),
@@ -97,22 +105,27 @@ def prepare_board(board_slug: str, workspace: Path) -> None:
     for slug in sorted(list_boards()):
         if slug != "default" and slug.startswith("xhs"):
             command(["hermes", "kanban", "boards", "rm", slug, "--delete"])
+    board_name = "小红书侦察兵快速迭代" if board_slug == "xhs-scout" else "小红书流程测试 · 未定稿"
     command([
         "hermes", "kanban", "boards", "create", board_slug,
-        "--name", "小红书流程测试 · 未定稿",
+        "--name", board_name,
         "--default-workdir", str(workspace),
         "--switch",
     ])
 
 
-def start_iteration(root: Path, cfg: RunnerConfig) -> dict[str, Any]:
-    proc = command([
+def start_iteration(root: Path, cfg: RunnerConfig, *, pipeline_config: Path | None = None) -> dict[str, Any]:
+    args = [
         sys.executable,
         str(root / "run_iteration.py"),
         "--profile", cfg.profile,
         "--workspace", str(cfg.workspace),
         "--board-slug", cfg.board_slug,
-    ], cwd=root)
+        "--account-name", cfg.account_name,
+    ]
+    if pipeline_config is not None:
+        args.extend(["--config", str(pipeline_config)])
+    proc = command(args, cwd=root)
     return json.loads(proc.stdout)
 
 
@@ -346,7 +359,7 @@ def remove_board(board: str) -> dict[str, Any]:
     return {"ok": proc.returncode == 0, "detail": (proc.stderr or proc.stdout).strip()[-1000:]}
 
 
-def execute_campaign(root: Path, cfg: RunnerConfig) -> dict[str, Any]:
+def execute_campaign(root: Path, cfg: RunnerConfig, *, pipeline_config: Path | None = None) -> dict[str, Any]:
     started = time.time()
     runtime_before = snapshot_runtime_files(root)
     board: str | None = None
@@ -355,7 +368,7 @@ def execute_campaign(root: Path, cfg: RunnerConfig) -> dict[str, Any]:
     try:
         with runner_lock(root):
             prepare_board(cfg.board_slug, cfg.workspace)
-            state = start_iteration(root, cfg)
+            state = start_iteration(root, cfg, pipeline_config=pipeline_config)
             started_board = state.get("board")
             if not isinstance(started_board, str) or not started_board:
                 raise RuntimeError("run_iteration.py did not return a board slug")
@@ -378,8 +391,11 @@ def execute_campaign(root: Path, cfg: RunnerConfig) -> dict[str, Any]:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run one bounded XHS Kanban workflow with guaranteed cleanup")
     parser.add_argument("--config", default=str(ROOT / "runner-config.json"))
+    parser.add_argument("--pipeline-config", help="Override pipeline.json passed to run_iteration.py")
+    parser.add_argument("--scout-only", action="store_true", help="Run only the scout refinement pipeline")
     parser.add_argument("--profile")
     parser.add_argument("--workspace")
+    parser.add_argument("--account-name", help="Current Xiaohongshu account nickname used for duplicate checks")
     parser.add_argument("--poll-seconds", type=int)
     parser.add_argument("--timeout-minutes", type=int)
     parser.add_argument("--keep-board", action="store_true", default=None)
@@ -396,13 +412,27 @@ def main() -> int:
             Path(args.config),
             profile=args.profile,
             workspace=args.workspace,
+            account_name=args.account_name,
             poll_seconds=args.poll_seconds,
             timeout_minutes=args.timeout_minutes,
             keep_board=args.keep_board,
         )
         if args.inject_error:
             raise RuntimeError("injected test error")
-        result = execute_campaign(ROOT, cfg)
+        pipeline_config = Path(args.pipeline_config).expanduser().resolve() if args.pipeline_config else None
+        if args.scout_only:
+            pipeline_config = ROOT / "scout-pipeline.json"
+            cfg = RunnerConfig(
+                profile=cfg.profile,
+                workspace=cfg.workspace,
+                account_name=cfg.account_name,
+                board_slug="xhs-scout",
+                poll_seconds=cfg.poll_seconds,
+                timeout_minutes=min(cfg.timeout_minutes, 8),
+                keep_board=True,
+                max_output_chars=cfg.max_output_chars,
+            )
+        result = execute_campaign(ROOT, cfg, pipeline_config=pipeline_config)
     except Exception as exc:
         result = {"status": "ERROR", "error": f"{type(exc).__name__}: {exc}"}
     text = json.dumps(result, ensure_ascii=False, indent=2)

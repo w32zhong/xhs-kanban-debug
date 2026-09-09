@@ -11,18 +11,35 @@
 git clone <repo-url> /path/to/xhs-kanban-workflow
 cd /path/to/xhs-kanban-workflow
 
-# 2. 确保 Hermes profile 的 worker 模型已配置（在 pipeline.json 的 default_assignee 中指定）
+# 2. 使用专用 worker profile；不要使用 default profile
 hermes profile list
+python3 scripts/configure-worker-profile.py \
+  --profile agent-xxxxxxxxxxxxxxxx \
+  --workspace "$(pwd)"
 
-# 3. 一键运行一轮（适合手动或 cron；不保证一定发布）
-python3 run.py
+# 3. 配置当前小红书账号昵称。账号名是运行参数，不写死在 prompt/pipeline 中
+# 推荐复制示例后本地填写；也可完全通过命令行/环境变量传入：
+#   "profile": "agent-xxxxxxxxxxxxxxxx",
+#   "account_name": "你的小红书昵称"
+# 仓库默认 runner-config.json 保持为空，不绑定任何 sandbox/profile/账号。
+
+# 4. 一键运行一轮（适合手动或 cron；不保证一定发布）
+python3 run.py \
+  --profile agent-xxxxxxxxxxxxxxxx \
+  --account-name '你的小红书昵称'
 
 # 通用变量可通过参数覆盖，不需要编辑源码
 python3 run.py \
   --profile agent-xxxxxxxxxxxxxxxx \
-  --workspace /absolute/path/to/xhs-kanban-workflow
+  --workspace /absolute/path/to/xhs-kanban-workflow \
+  --account-name '你的小红书昵称'
 
-# 也可编辑 runner-config.json，或设置 XHS_AGENT_PROFILE / XHS_WORKSPACE。
+# 只优化侦察兵、不启动圆桌和发布：
+python3 run.py --scout-only \
+  --profile agent-xxxxxxxxxxxxxxxx \
+  --account-name '你的小红书昵称'
+
+# 也可编辑 runner-config.json，或设置 XHS_AGENT_PROFILE / XHS_WORKSPACE / XHS_ACCOUNT_NAME。
 # run.py 使用进程锁避免重叠；每轮开始前删除旧的 `xhs*` 工作流看板，
 # 然后重建固定 slug `xhs-run`，因此 Kanban UI 中始终只需查看同一个看板。
 # 无论成功、拒绝、超时或异常，都会保留当前 `xhs-run` 看板供查看，同时清理本轮 tabs、
@@ -172,8 +189,9 @@ Dispatcher 会在父任务完成后自动推进 blocked 子任务，无需手动
 
 - `prompts/search-worker.md`：搜索 worker（含 `agent-browser read`）。
 - `prompts/verify-worker.md`：独立验证 worker（含 `agent-browser read` 优先）。
-- `prompts/review-worker.md`：圆桌委员 worker（纯文本，无浏览器）。
-- `prompts/chair-worker.md`：委员长 worker（纯文本，综合裁定）。
+- `prompts/review-worker.md`：圆桌委员 worker（纯文本，按本地短回复规范生成默认 1–2 句话）。
+- `prompts/chair-worker.md`：委员长 worker（纯文本，执行最多 3 句话、1 个关键点的终审）。
+- `prompts/xhs-reply-style.md`：仓库内自包含的小红书短回复规范；不依赖仓库外文档。
 - `prompts/publish-send-worker.md`：发布 worker（搜索→定位→绑定→输入→发送，一步完成）。
 - `prompts/publish-verify-worker.md`：发布后独立复核。
 
@@ -186,7 +204,9 @@ Dispatcher 会在父任务完成后自动推进 blocked 子任务，无需手动
 - `pipeline.json`：当前调试阶段的任务图和参数。
 - `finalize_run.py`：确定性协调与清理，不调用 LLM；严格决策表、前缀限定文件清理、保留 Kanban UI 和一个小红书登录态标签。
 - `test_finalize_run.py`：收尾决策表和安全前缀回归测试。
-- `run_iteration.py`：新建一轮 board、创建任务并立即 dispatch。
+- `run_iteration.py`：新建一轮 board、创建任务并立即 dispatch；账号昵称由 `--account-name` 运行时注入。
+- `scripts/configure-worker-profile.py`：新环境一键启用原生 Kanban worker 工具、禁用 Vision 并固定项目 cwd。
+- `scout-pipeline.json` / `SCOUT-REFINEMENT.md`：只运行侦察兵的快速提示词迭代入口。
 - `watch_run.py`：持续收集当前轮任务状态和 worker 日志。
 - `resource_guard.py`：浏览器标签页数量守卫。
 - `publish-target-pool.json`：发布泛化测试目标池（5 个不同布局目标）。
