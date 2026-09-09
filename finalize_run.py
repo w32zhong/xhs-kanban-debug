@@ -47,6 +47,7 @@ def normalize(data: dict[str, Any]) -> dict[str, Any]:
         "exact_draft_outside_target": "EXACT_DRAFT_OUTSIDE_TARGET_LITERAL",
         "exact_draft_found_outside_target_thread": "EXACT_DRAFT_OUTSIDE_TARGET_LITERAL",
         "content_modified": "CONTENT_MODIFIED_LITERAL",
+        "deletions_performed": "DELETIONS_PERFORMED_LITERAL",
         "run_prefix": "RUN_PREFIX_LITERAL",
         "archive_board": "ARCHIVE_BOARD_LITERAL",
     }
@@ -81,8 +82,25 @@ def validate(data: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
                 "EXACT_DRAFT_OUTSIDE_TARGET_LITERAL"]:
         if key in d and d[key] not in {"YES", "NO", "UNKNOWN"}:
             errors.append(f"invalid {key}={d[key]!r}")
-    if d.get("CONTENT_MODIFIED_LITERAL") != "NO":
-        errors.append("CONTENT_MODIFIED_LITERAL must be NO")
+    modified = d.get("CONTENT_MODIFIED_LITERAL")
+    cleanup_statuses = {"DUPLICATES_DELETED", "MISMATCH_DELETED"}
+    if modified not in {"YES", "NO"}:
+        errors.append("CONTENT_MODIFIED_LITERAL must be YES or NO")
+    raw_deletions = d.get("DELETIONS_PERFORMED_LITERAL", 0)
+    try:
+        deletions = int(raw_deletions)
+        if deletions < 0:
+            raise ValueError
+    except (TypeError, ValueError):
+        errors.append("DELETIONS_PERFORMED_LITERAL must be a non-negative integer")
+        deletions = 0
+    d["_deletions"] = deletions
+    verify = d.get("VERIFY_STATUS_LITERAL")
+    if verify in cleanup_statuses:
+        if modified != "YES" or deletions < 1:
+            errors.append(f"{verify} requires content_modified YES and at least one deletion")
+    elif modified != "NO" or deletions != 0:
+        errors.append("content modification is allowed only for bounded cleanup statuses")
     try:
         d["_count"] = parse_count(d.get("EXACT_DRAFT_COUNT_LITERAL"))
     except ValueError as exc:
@@ -115,6 +133,10 @@ def decide(d: dict[str, Any], errors: list[str]) -> dict[str, str]:
 
     if verify == "VERIFIED" and context == "YES" and exhausted == "YES" and count == 1 and outside == "NO":
         return result("NO_ACTION", "VERIFIED_SINGLE_CORRECT_REPLY", "NO", "NONE")
+    if verify == "DUPLICATES_DELETED" and context == "YES" and count == 1 and d.get("_deletions", 0) >= 1:
+        return result("NO_ACTION", "DUPLICATES_REMOVED_SINGLE_REPLY_REMAINS", "NO", "NONE")
+    if verify == "MISMATCH_DELETED" and count == 0 and d.get("_deletions", 0) >= 1:
+        return result("NO_ACTION", "MISMATCH_REMOVED", "NO", "NONE")
     if verify == "WRONG_THREAD" or (outside == "YES" and count == 0):
         return result("MANUAL_DELETE_REQUIRED", "WRONG_THREAD_PUBLISHED", "NO", "REVIEW_AND_DELETE_WRONG_THREAD")
     if verify == "DUPLICATE_REPLY" or (count is not None and count > 1):

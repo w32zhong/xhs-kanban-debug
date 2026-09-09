@@ -118,6 +118,28 @@ class ResultTests(unittest.TestCase):
         ]
         self.assertFalse(run.is_published_and_verified(stages))
 
+    def test_cleaned_duplicates_with_one_reply_remaining_is_published(self) -> None:
+        stages = [
+            {"key": "chair", "result_status": "APPROVE"},
+            {"key": "publish-send", "result_status": "SEND_SUCCESS"},
+            {"key": "publish-verify", "result_status": "DUPLICATES_DELETED", "metadata": {
+                "exact_draft_count_in_target_thread": "1",
+                "deletions_performed": 1,
+            }},
+        ]
+        self.assertTrue(run.is_published_and_verified(stages))
+
+    def test_mismatched_reply_deleted_is_not_published(self) -> None:
+        stages = [
+            {"key": "chair", "result_status": "APPROVE"},
+            {"key": "publish-send", "result_status": "SEND_SUCCESS"},
+            {"key": "publish-verify", "result_status": "MISMATCH_DELETED", "metadata": {
+                "exact_draft_count_in_target_thread": "0",
+                "deletions_performed": 1,
+            }},
+        ]
+        self.assertFalse(run.is_published_and_verified(stages))
+
 
 class SemanticGateTests(unittest.TestCase):
     def test_finish_without_worker_promotes_before_completing(self) -> None:

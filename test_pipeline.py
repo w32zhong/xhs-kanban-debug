@@ -117,6 +117,19 @@ class QualityRoundtablePipelineTests(unittest.TestCase):
         self.assertIn("--account-name", readme)
         self.assertIn("不要使用 default profile", readme)
 
+    def test_publish_verifier_schema_allows_only_bounded_cleanup(self) -> None:
+        prompt = (ROOT / "prompts/publish-verify-worker.md").read_text(encoding="utf-8")
+        schema = (ROOT / "schemas/publish-verify-result.md").read_text(encoding="utf-8")
+        for status in ("DUPLICATES_DELETED", "MISMATCH_DELETED"):
+            self.assertIn(status, prompt)
+            self.assertIn(status, schema)
+        self.assertIn("content_modified: YES", schema)
+        self.assertIn("deletions_performed", schema)
+        self.assertIn("累计最多点击 5 次", schema)
+        self.assertIn("语义", schema)
+        self.assertNotIn("最多 100 次", schema)
+        self.assertNotIn("content_modified` 永远为 `NO", schema)
+
     def test_review_enforces_length_necessity_not_formula(self) -> None:
         prompt = (ROOT / "prompts/review-worker.md").read_text(encoding="utf-8")
         self.assertIn("默认一两句", prompt)

@@ -299,7 +299,7 @@ def is_published_and_verified(stages: list[dict[str, Any]]) -> bool:
     return (
         status.get("chair") == "APPROVE"
         and status.get("publish-send") == "SEND_SUCCESS"
-        and status.get("publish-verify") == "VERIFIED"
+        and status.get("publish-verify") in {"VERIFIED", "DUPLICATES_DELETED"}
         and verify_metadata.get("exact_draft_count_in_target_thread", "1") in (1, "1")
     )
 

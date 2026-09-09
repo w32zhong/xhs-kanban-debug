@@ -2,7 +2,7 @@
   "stage": "dynamic-e2e-quality-roundtable-v3",
   "board_prefix": "xhs-run",
   "workspace": ".",
-  "default_assignee": "",
+  "default_assignee": "fantastic-darsie",
   "target_source": "dynamic_search",
   "search_keywords": [
     "AI长任务中断怎么办",

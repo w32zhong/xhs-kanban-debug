@@ -2,7 +2,7 @@
 
 ```text
 PUBLISH_VERIFY_RESULT
-status: VERIFIED | TARGET_NOT_FOUND | TOKEN_URL_MISSING | TARGET_FLOOR_NOT_FOUND | THREAD_UNCONFIRMED | REPLY_NOT_FOUND | WRONG_THREAD | DUPLICATE_REPLY | LOGIN_REQUIRED | BROWSER_ERROR | SETUP_ERROR
+status: VERIFIED | DUPLICATES_DELETED | MISMATCH_DELETED | TARGET_NOT_FOUND | TOKEN_URL_MISSING | TARGET_FLOOR_NOT_FOUND | THREAD_UNCONFIRMED | REPLY_NOT_FOUND | WRONG_THREAD | DUPLICATE_REPLY | LOGIN_REQUIRED | BROWSER_ERROR | SETUP_ERROR
 session_name: <session>
 posts_opened: <0-1>
 target_title: <参数指定标题>
@@ -19,7 +19,8 @@ draft_exact_match: YES | NO | UNKNOWN
 exact_draft_count_in_target_thread: <整数或 UNKNOWN>
 exact_draft_found_outside_target_thread: YES | NO | UNKNOWN
 publisher_claim_used: NO
-content_modified: NO
+deletions_performed: <非负整数>
+content_modified: YES | NO
 vision_calls: 0
 evidence_file: NONE
 obstacles:
@@ -28,13 +29,14 @@ obstacles:
 
 规则：
 
-- `VERIFIED` 仅用于：作者与目标评论前缀匹配，逐字定稿位于该目标一级评论的线程内，且该线程中的逐字定稿恰好出现一次。
-- 状态机单向执行：V0→V1→V2→V3→V4→V5；V0-V3 每步最多一次。第一次 `read` 后禁止回到 V0-V3。任务最多执行 1 次搜索、打开 1 篇帖子。V4 可为穷尽目标线程而循环点击其明确文字 `展开更多回复`，累计展开点击最多 100 次；每次点击后 fresh snapshot，每 10 次或线程穷尽时 fresh read。
-- 如果页面结构无法按规则确认，必须返回最接近的安全失败状态；禁止从头重跑来消除不确定性。
-- `REPLY_NOT_FOUND`：目标楼层明确、目标线程已穷尽，且目标线程内逐字定稿出现 0 次。
-- `DUPLICATE_REPLY`：目标线程内逐字定稿出现超过 1 次。
-- `WRONG_THREAD`：逐字定稿在页面其他楼层出现，但目标线程内没有。
+- `VERIFIED` 仅用于：目标上下文匹配，语义与定稿一致的回复恰好出现一次，且没有执行删除。
+- `DUPLICATES_DELETED`：只删除本轮发布造成的多余重复，删除至少 1 条，并确认目标线程最终只剩 1 条语义匹配回复。
+- `MISMATCH_DELETED`：只删除可确认由本轮 publisher 新发、但与定稿语义不一致的回复，并确认它已经消失。
+- 状态机单向执行：只打开 scout 保存的目标 URL，不重新搜索；累计最多点击 5 次明确文字的“展开回复/展开更多回复”，每次都使用 fresh ref，随后用 fresh read 判断目标线程是否穷尽。
+- `REPLY_NOT_FOUND`：目标楼层明确、目标线程已穷尽，且目标线程内语义与定稿一致的回复出现 0 次。
+- `DUPLICATE_REPLY`：目标线程内语义与定稿一致的回复超过 1 次，但删除失败或无法确认最终只剩 1 条。
+- `WRONG_THREAD`：语义与定稿一致的回复出现在页面其他楼层，但目标线程内没有。
 - `THREAD_UNCONFIRMED`：无法可靠确定子回复归属/展开状态，或目标线程仍有未展开回复。线程未穷尽时不得用 `REPLY_NOT_FOUND`。
 - 复核必须完全独立，`publisher_claim_used` 永远为 `NO`。
-- 禁止修改页面内容，`content_modified` 永远为 `NO`，`vision_calls` 永远为 `0`，`evidence_file` 永远为 `NONE`。
+- 页面修改仅限上述两种有界清理。`DUPLICATES_DELETED` 或 `MISMATCH_DELETED` 时 `content_modified: YES` 且 `deletions_performed >= 1`；其他状态必须为 `content_modified: NO`、`deletions_performed: 0`。禁止删除历史回复、其他账号回复或其他楼层内容。`vision_calls` 永远为 `0`，`evidence_file` 永远为 `NONE`。
 - 完成后调用注入的 `kanban_complete`。

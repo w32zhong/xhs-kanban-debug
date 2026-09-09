@@ -49,6 +49,32 @@ class DecisionTests(unittest.TestCase):
         out, _ = self.decision(base(VERIFY_STATUS_LITERAL="DUPLICATE_REPLY", EXACT_DRAFT_COUNT_LITERAL="2"))
         self.assertEqual(out["reason_code"], "DUPLICATE_PUBLISHED")
 
+    def test_duplicates_already_deleted_need_no_manual_action(self):
+        out, errors = self.decision(base(
+            VERIFY_STATUS_LITERAL="DUPLICATES_DELETED",
+            CONTENT_MODIFIED_LITERAL="YES",
+            DELETIONS_PERFORMED_LITERAL=1,
+        ))
+        self.assertEqual(errors, [])
+        self.assertEqual(out["decision"], "NO_ACTION")
+        self.assertEqual(out["reason_code"], "DUPLICATES_REMOVED_SINGLE_REPLY_REMAINS")
+
+    def test_mismatch_already_deleted_needs_no_manual_delete(self):
+        out, errors = self.decision(base(
+            VERIFY_STATUS_LITERAL="MISMATCH_DELETED",
+            CONTENT_MODIFIED_LITERAL="YES",
+            DELETIONS_PERFORMED_LITERAL=1,
+            EXACT_DRAFT_COUNT_LITERAL="0",
+        ))
+        self.assertEqual(errors, [])
+        self.assertEqual(out["decision"], "NO_ACTION")
+        self.assertEqual(out["reason_code"], "MISMATCH_REMOVED")
+
+    def test_content_modified_yes_is_invalid_without_cleanup_status(self):
+        out, errors = self.decision(base(CONTENT_MODIFIED_LITERAL="YES", DELETIONS_PERFORMED_LITERAL=1))
+        self.assertTrue(errors)
+        self.assertEqual(out["reason_code"], "INVALID_OR_CONTRADICTORY_INPUT")
+
     def test_clicked_but_absent_never_retries(self):
         out, _ = self.decision(base(VERIFY_STATUS_LITERAL="REPLY_NOT_FOUND", EXACT_DRAFT_COUNT_LITERAL="0"))
         self.assertEqual(out["decision"], "ESCALATE_MANUAL")
