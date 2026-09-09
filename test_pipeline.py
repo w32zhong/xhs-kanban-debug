@@ -206,6 +206,16 @@ class QualityRoundtablePipelineTests(unittest.TestCase):
         self.assertIn("超过 4 行", prompt)
         self.assertIn("教程式", prompt)
 
+    def test_publisher_uses_short_bounded_path_and_delegates_deep_check_to_verifier(self) -> None:
+        prompt = (ROOT / "prompts/publish-send-worker.md").read_text(encoding="utf-8")
+        for forbidden in ("agent-browser --help", "session_search", "HTML/DOM 探索", "无关点击实验"):
+            self.assertIn(forbidden, prompt)
+        self.assertIn("最多重新加载页面 1 次", prompt)
+        self.assertIn("累计最多尝试 2 次", prompt)
+        self.assertIn("existing exact reply reconciled", prompt)
+        self.assertIn("发布复核", prompt)
+        self.assertIn("调用返回后立即", prompt)
+
     def test_browser_safety_gates_are_still_present(self) -> None:
         publish = (ROOT / "prompts/publish-send-worker.md").read_text(encoding="utf-8")
         self.assertIn("作者 + 唯一前缀必须匹配", publish)
