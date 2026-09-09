@@ -17,7 +17,7 @@
 **严格走短路径：**禁止 `agent-browser --help`、`session_search`、技能/源码/HTML/DOM 探索、无关点击实验和从首页重新搜索。直接使用 scout 的 share URL。最多重新加载页面 1 次，目标回复入口最多尝试 2 次；仍无法绑定就立即写 `NEEDS_VERIFIER` 并完成，不得继续探索。
 
 1. 从 scout 读取 `post_url`、`target_comment_author`、`target_comment_text`、`target_comment_excerpt`；从 chair 读取 `final_comment`。禁止使用 publish-target-pool 或 PARAM_FILE 中的旧目标/旧草案覆盖它们。
-2. 打开浏览器前先执行本地短回复门禁：`final_comment` 超过 3 句话、超过 4 行、明显包含多个并列建议，或属于清单/步骤/教程式展开时，写 `TEXT_TOO_LONG` 并结束，不得发布。不要替委员长现场改稿。
+2. 打开浏览器前先执行回复门禁：长度应由目标评论的 wish 和复杂度决定。通常 1–3 句话；超过 5 句话、超过 8 行、明显机械分点或属于完整教程式展开时，写 `TEXT_TOO_LONG` 并结束，不得发布。不要替委员长现场改稿。
 3. 用新的 pinned browser session 直接 `agent-browser open "$POST_URL"`。这是本轮 scout 点击产生的 share URL；无需重新从首页搜索。
 4. snapshot + read 锁定作者和逐字评论。作者 + 唯一前缀必须匹配。
 5. 只检查目标楼层当前可见回复；若有明确“展开 N 条回复”，最多展开一次再 read。

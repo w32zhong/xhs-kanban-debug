@@ -132,19 +132,18 @@ class QualityRoundtablePipelineTests(unittest.TestCase):
 
     def test_review_enforces_length_necessity_not_formula(self) -> None:
         prompt = (ROOT / "prompts/review-worker.md").read_text(encoding="utf-8")
-        self.assertIn("默认一两句", prompt)
-        self.assertIn("问句不是必选项", prompt)
-        self.assertIn("承接句不是必选项", prompt)
-        self.assertIn("拟人的懒惰", prompt)
+        self.assertIn("长度由目标评论的 wish", prompt)
+        self.assertIn("通常 1–3 句话", prompt)
+        self.assertIn("复杂问题若短到答非所问", prompt)
+        self.assertIn("不因超过一句就自动压短", prompt)
         self.assertNotIn("20–100 个中文字符", prompt)
 
     def test_chair_runs_compression_and_anti_template_pass(self) -> None:
         prompt = (ROOT / "prompts/chair-worker.md").read_text(encoding="utf-8")
-        self.assertIn("先删到不能再删", prompt)
-        self.assertIn("一句话能完成，就不要写两句", prompt)
-        self.assertIn("不得为了结构完整补问句", prompt)
-        self.assertIn("事实问题确实需要解释", prompt)
-        self.assertIn("像随手回的", prompt)
+        self.assertIn("只删除重复、空泛、客服式", prompt)
+        self.assertIn("不得删除理解答案所需的解释", prompt)
+        self.assertIn("不得把黄金话术或 PMF 直球压没", prompt)
+        self.assertNotIn("先删到不能再删", prompt)
 
     def test_roundtable_focus_does_not_force_empathy_or_questions(self) -> None:
         tasks = {task["key"]: task for task in self.pipeline["tasks"]}
@@ -159,9 +158,9 @@ class QualityRoundtablePipelineTests(unittest.TestCase):
 
     def test_local_xhs_reply_style_guide_is_self_contained(self) -> None:
         guide = (ROOT / "prompts/xhs-reply-style.md").read_text(encoding="utf-8")
-        self.assertIn("默认 1–2 句话", guide)
-        self.assertIn("最多 3 句话", guide)
-        self.assertIn("最多 1 个关键点", guide)
+        self.assertIn("通常 1–3 句话", guide)
+        self.assertIn("复杂问题若删短会失真", guide)
+        self.assertIn("两个信息点", guide)
         self.assertIn("打钳", guide)
         self.assertIn("小范围内测", guide)
         self.assertNotIn("old-xhs-docs", guide)
@@ -186,24 +185,52 @@ class QualityRoundtablePipelineTests(unittest.TestCase):
     def test_reviewers_must_follow_short_reply_guide(self) -> None:
         prompt = (ROOT / "prompts/review-worker.md").read_text(encoding="utf-8")
         self.assertIn("./prompts/xhs-reply-style.md", prompt)
-        self.assertIn("最多 3 句话", prompt)
-        self.assertIn("最多 1 个关键点", prompt)
-        self.assertIn("不得输出小作文", prompt)
+        self.assertIn("通常 1–3 句话", prompt)
+        self.assertIn("复杂问题若短到答非所问", prompt)
+        self.assertIn("不得输出机械清单", prompt)
 
     def test_chair_hard_limits_final_comment(self) -> None:
         prompt = (ROOT / "prompts/chair-worker.md").read_text(encoding="utf-8")
         self.assertIn("./prompts/xhs-reply-style.md", prompt)
-        self.assertIn("默认 1–2 句话", prompt)
-        self.assertIn("最多 3 句话", prompt)
-        self.assertIn("最多 4 行", prompt)
-        self.assertIn("先删到不能再删", prompt)
+        self.assertIn("通常 1–3 句话", prompt)
+        self.assertIn("复杂问题", prompt)
+        self.assertIn("长度由目标评论的 wish", prompt)
+        self.assertNotIn("一句话能完成，就不要写两句", prompt)
+
+    def test_response_length_adapts_to_user_wish_instead_of_forcing_one_sentence(self) -> None:
+        guide = (ROOT / "prompts/xhs-reply-style.md").read_text(encoding="utf-8")
+        review = (ROOT / "prompts/review-worker.md").read_text(encoding="utf-8")
+        chair = (ROOT / "prompts/chair-worker.md").read_text(encoding="utf-8")
+        publish = (ROOT / "prompts/publish-send-worker.md").read_text(encoding="utf-8")
+        for text in (guide, review, chair):
+            self.assertIn("长度由目标评论的 wish", text)
+            self.assertIn("通常 1–3 句话", text)
+        self.assertIn("超过 5 句话", publish)
+        self.assertNotIn("超过 3 句话", publish)
+
+    def test_writers_must_explicitly_classify_original_playbook_match_and_pmf(self) -> None:
+        for name in ("review-worker.md", "chair-worker.md"):
+            prompt = (ROOT / "prompts" / name).read_text(encoding="utf-8")
+            for marker in ("original_match", "pmf_fit", "response_mode"):
+                self.assertIn(marker, prompt)
+            self.assertTrue("perfect product-demand fit" in prompt or "pmf_fit=PERFECT" in prompt)
+            self.assertIn("直球", prompt)
+
+    def test_perfect_pmf_requires_direct_offer_not_generic_empathy(self) -> None:
+        guide = (ROOT / "prompts/xhs-reply-style.md").read_text(encoding="utf-8")
+        chair = (ROOT / "prompts/chair-worker.md").read_text(encoding="utf-8")
+        self.assertIn("PMF_DIRECT", guide)
+        self.assertIn("PMF_DIRECT", chair)
+        self.assertIn("4 小时", guide)
+        self.assertIn("邀请码", guide)
+        self.assertIn("不得退回泛泛共情", chair)
 
     def test_publisher_rejects_overlong_or_tutorial_style_comment(self) -> None:
         prompt = (ROOT / "prompts/publish-send-worker.md").read_text(encoding="utf-8")
         self.assertIn("./prompts/xhs-reply-style.md", prompt)
         self.assertIn("TEXT_TOO_LONG", prompt)
-        self.assertIn("超过 3 句话", prompt)
-        self.assertIn("超过 4 行", prompt)
+        self.assertIn("超过 5 句话", prompt)
+        self.assertIn("超过 8 行", prompt)
         self.assertIn("教程式", prompt)
 
     def test_publisher_uses_short_bounded_path_and_delegates_deep_check_to_verifier(self) -> None:
