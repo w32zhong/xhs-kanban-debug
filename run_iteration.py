@@ -171,6 +171,10 @@ def main() -> None:
         for key, value in task.get("body_vars", {}).items():
             body_lines.append(f"{key}: {value}")
         body_lines.append("禁止 git/pwd/env/目录搜索/hermes kanban CLI/SQLite/额外 skill；严格遵守所引用 prompt 的副作用边界。")
+        body_lines.append(
+            '若使用浏览器：每一条命令必须显式使用 agent-browser --session "$SESSION_NAME" --pin-tab；'
+            "禁止依赖默认 session，禁止访问、关闭或复用其他 session 的标签页。"
+        )
 
         configured_assignee = task.get("assignee") or config.get("default_assignee", "")
         args = [

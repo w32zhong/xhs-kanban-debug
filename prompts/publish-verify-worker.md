@@ -12,6 +12,10 @@
 
 若 `runtime/publish-result.json` 的 `status` 不是 `SEND_SUCCESS`，或 `send_clicked` 不是 `YES`，立即完成为 `SKIPPED_NO_SEND`。禁止打开浏览器，也不得把历史上已存在的同文回复当成本轮成功。
 
+## 浏览器 session 隔离硬规则
+
+先 source `PARAM_FILE` 取得 `SESSION_NAME`。**每一条** browser 命令都必须显式写成 `agent-browser --session "$SESSION_NAME" --pin-tab ...`。禁止依赖默认 session，禁止省略 `--session` 或 `--pin-tab`，禁止访问、关闭、导航或复用其他 session 的标签页。
+
 ## 快速复核
 
 1. 用 fresh pinned session 直接打开 scout 的 `post_url`，不重新搜索。

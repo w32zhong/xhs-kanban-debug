@@ -15,7 +15,11 @@
 
 不要读取 `pipeline.json`、`highclaws-features.md` 或任何其他文件；本任务所需策略已完整写在本文件中。
 
-先调用原生 `kanban_show` 工具一次，然后直接工作。禁止使用 terminal 运行 `hermes kanban show/complete`。结束时必须调用原生 `kanban_complete` 工具。每个 browser 命令块都 source `PARAM_FILE`，并使用 `SESSION_NAME` 作为固定 pinned browser session。
+先调用原生 `kanban_show` 工具一次，然后直接工作。禁止使用 terminal 运行 `hermes kanban show/complete`。结束时必须调用原生 `kanban_complete` 工具。
+
+## 浏览器 session 隔离硬规则
+
+先 source `PARAM_FILE` 取得 `SESSION_NAME`。**每一条** browser 命令都必须显式写成 `agent-browser --session "$SESSION_NAME" --pin-tab ...`，包括 open、reload、snapshot、read、click、scroll、back、get、wait。禁止依赖默认 session，禁止省略 `--session` 或 `--pin-tab`，禁止访问、关闭、导航或复用其他 session 的标签页。
 
 `PARAM_FILE` 必须提供：
 

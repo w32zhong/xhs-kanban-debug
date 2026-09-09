@@ -12,6 +12,10 @@
 
 `runtime/chair-decision.json` 的 `decision` 不是 `APPROVE`，或 `final_comment` 为空/NONE 时，立即写 `SKIPPED_NOT_APPROVED`，不得打开浏览器。
 
+## 浏览器 session 隔离硬规则
+
+先 source `PARAM_FILE` 取得 `SESSION_NAME`。**每一条** browser 命令都必须显式写成 `agent-browser --session "$SESSION_NAME" --pin-tab ...`。禁止依赖默认 session，禁止省略 `--session` 或 `--pin-tab`，禁止访问、关闭、导航或复用其他 session 的标签页。
+
 ## 快速且安全的门禁
 
 **严格走短路径：**禁止 `agent-browser --help`、`session_search`、技能/源码/HTML/DOM 探索、无关点击实验和从首页重新搜索。直接使用 scout 的 share URL。最多重新加载页面 1 次，目标回复入口最多尝试 2 次；仍无法绑定就立即写 `NEEDS_VERIFIER` 并完成，不得继续探索。

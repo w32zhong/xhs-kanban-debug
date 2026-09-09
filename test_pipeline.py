@@ -243,6 +243,18 @@ class QualityRoundtablePipelineTests(unittest.TestCase):
         self.assertIn("发布复核", prompt)
         self.assertIn("调用返回后立即", prompt)
 
+    def test_all_browser_workers_require_explicit_pinned_session_on_every_command(self) -> None:
+        for name in ("scout-worker.md", "publish-send-worker.md", "publish-verify-worker.md"):
+            prompt = (ROOT / "prompts" / name).read_text(encoding="utf-8")
+            self.assertIn('agent-browser --session "$SESSION_NAME" --pin-tab', prompt)
+            self.assertIn("每一条", prompt)
+            self.assertIn("禁止依赖默认 session", prompt)
+
+    def test_task_body_repeats_browser_session_isolation_rule(self) -> None:
+        source = (ROOT / "run_iteration.py").read_text(encoding="utf-8")
+        self.assertIn('agent-browser --session "$SESSION_NAME" --pin-tab', source)
+        self.assertIn("禁止访问、关闭或复用其他 session", source)
+
     def test_browser_safety_gates_are_still_present(self) -> None:
         publish = (ROOT / "prompts/publish-send-worker.md").read_text(encoding="utf-8")
         self.assertIn("作者 + 唯一前缀必须匹配", publish)
