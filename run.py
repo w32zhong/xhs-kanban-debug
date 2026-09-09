@@ -21,7 +21,7 @@ from typing import Any, Iterator
 ROOT = Path(__file__).resolve().parent
 RUNTIME_DIRS = ("runtime", "runtime-params", "logs", "evidence", "roundtable")
 RUNTIME_ROOT_FILES = ("current-run.json", "full-e2e-current.json")
-ACTIVE_STATUSES = {"triage", "todo", "scheduled", "ready", "running", "review"}
+ACTIVE_STATUSES = {"triage", "todo", "scheduled", "ready", "running", "review", "blocked"}
 WAITING_STATUSES = {"triage", "todo", "scheduled", "ready", "blocked"}
 
 
@@ -101,10 +101,12 @@ def list_boards() -> set[str]:
 
 
 def prepare_board(board_slug: str, workspace: Path) -> None:
-    """Keep exactly one non-default XHS board visible in the dashboard."""
-    for slug in sorted(list_boards()):
-        if slug != "default" and slug.startswith("xhs"):
-            command(["hermes", "kanban", "boards", "rm", slug, "--delete"])
+    """Create the persistent board once, otherwise reuse it in place."""
+    boards = list_boards()
+    if board_slug in boards:
+        command(["hermes", "kanban", "boards", "set-default-workdir", board_slug, str(workspace)])
+        command(["hermes", "kanban", "boards", "switch", board_slug])
+        return
     board_name = "小红书侦察兵快速迭代" if board_slug == "xhs-scout" else "小红书流程测试 · 未定稿"
     command([
         "hermes", "kanban", "boards", "create", board_slug,
@@ -134,13 +136,24 @@ def list_tasks(board: str) -> list[dict[str, Any]]:
     return json.loads(proc.stdout)
 
 
-def board_is_terminal(tasks: list[dict[str, Any]]) -> bool:
-    return bool(tasks) and not any(task.get("status") in ACTIVE_STATUSES for task in tasks)
+def board_is_terminal(tasks: list[dict[str, Any]], current_task_ids: set[str]) -> bool:
+    """Return whether every task created by this iteration has terminated."""
+    if not current_task_ids:
+        return False
+    current = {task.get("id"): task for task in tasks if task.get("id") in current_task_ids}
+    return current_task_ids <= current.keys() and not any(
+        task.get("status") in ACTIVE_STATUSES for task in current.values()
+    )
 
 
 def activate_waiting_task(board: str, task_id: str, profile: str) -> None:
     """Assign the next semantically approved card so the dispatcher may spawn it."""
     command(["hermes", "kanban", "--board", board, "assign", task_id, profile])
+
+
+def dispatch_board(board: str, *, max_tasks: int = 2) -> None:
+    """Dispatch newly assigned cards without waiting for the periodic timer."""
+    command(["hermes", "kanban", "--board", board, "dispatch", "--max", str(max_tasks)])
 
 
 def finish_without_worker(board: str, task_id: str, reason: str) -> None:
@@ -195,6 +208,8 @@ def apply_semantic_gates(
                     raise RuntimeError("iteration state is missing worker profile")
                 activate_waiting_task(board, task_id, profile)
                 changed = True
+        if changed:
+            dispatch_board(board, max_tasks=2)
         return changed
 
     def skip(keys: list[str], reason: str) -> bool:
@@ -242,14 +257,37 @@ def apply_semantic_gates(
 
 def wait_for_board(board: str, state: dict[str, Any], cfg: RunnerConfig) -> list[dict[str, Any]]:
     deadline = time.monotonic() + cfg.timeout_minutes * 60
+    created = state.get("created", [])
+    current_task_ids = {
+        item.get("id") for item in created
+        if isinstance(item.get("id"), str) and item.get("id")
+    }
+    created_by_id = {item.get("id"): item for item in created}
     while True:
         tasks = list_tasks(board)
         if apply_semantic_gates(board, state, tasks):
             tasks = list_tasks(board)
-        if board_is_terminal(tasks):
+        if board_is_terminal(tasks, current_task_ids):
             return tasks
         if time.monotonic() >= deadline:
-            raise TimeoutError(f"board {board} exceeded {cfg.timeout_minutes} minutes")
+            task_by_id = {task.get("id"): task for task in tasks}
+            pending = []
+            for task_id in current_task_ids:
+                task = task_by_id.get(task_id, {})
+                status = task.get("status", "missing")
+                if status in ACTIVE_STATUSES or status == "missing":
+                    created_task = created_by_id.get(task_id, {})
+                    pending.append({
+                        "key": created_task.get("key"),
+                        "id": task_id,
+                        "status": status,
+                        "assignee": task.get("assignee"),
+                    })
+            pending.sort(key=lambda item: (str(item.get("key")), str(item.get("id"))))
+            detail = json.dumps(pending, ensure_ascii=False, separators=(",", ":"))
+            raise TimeoutError(
+                f"board {board} exceeded {cfg.timeout_minutes} minutes; current nonterminal tasks: {detail}"
+            )
         time.sleep(cfg.poll_seconds)
 
 

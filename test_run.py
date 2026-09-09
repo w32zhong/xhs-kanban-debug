@@ -76,21 +76,80 @@ class CleanupTests(unittest.TestCase):
 
 
 class BoardTests(unittest.TestCase):
-    def test_terminal_when_all_tasks_done(self) -> None:
-        self.assertTrue(run.board_is_terminal([{"status": "done"}, {"status": "done"}]))
+    def test_terminal_when_all_current_tasks_done(self) -> None:
+        tasks = [{"id": "a", "status": "done"}, {"id": "b", "status": "done"}]
+        self.assertTrue(run.board_is_terminal(tasks, {"a", "b"}))
 
-    def test_not_terminal_while_task_waits(self) -> None:
-        self.assertFalse(run.board_is_terminal([{"status": "done"}, {"status": "todo"}]))
+    def test_not_terminal_while_current_task_waits(self) -> None:
+        tasks = [{"id": "a", "status": "done"}, {"id": "b", "status": "todo"}]
+        self.assertFalse(run.board_is_terminal(tasks, {"a", "b"}))
 
-    def test_prepare_board_keeps_one_fixed_test_board(self) -> None:
+    def test_not_terminal_while_current_task_is_blocked(self) -> None:
+        self.assertFalse(run.board_is_terminal([{"id": "a", "status": "blocked"}], {"a"}))
+
+    def test_historical_active_task_does_not_block_current_run(self) -> None:
+        tasks = [{"id": "old", "status": "running"}, {"id": "current", "status": "done"}]
+        self.assertTrue(run.board_is_terminal(tasks, {"current"}))
+
+    def test_missing_current_task_is_not_terminal(self) -> None:
+        self.assertFalse(run.board_is_terminal([{"id": "old", "status": "done"}], {"current"}))
+
+    def test_prepare_existing_board_reuses_it_and_preserves_other_boards(self) -> None:
         calls: list[tuple[str, ...]] = []
         proc = type("P", (), {"returncode": 0, "stdout": "", "stderr": ""})()
         with patch.object(run, "list_boards", return_value={"default", "xhs-old", "xhs-run"}), patch.object(
             run, "command", side_effect=lambda args, **_: calls.append(tuple(args)) or proc
         ):
             run.prepare_board("xhs-run", Path("/tmp/project"))
-        self.assertIn(("hermes", "kanban", "boards", "rm", "xhs-old", "--delete"), calls)
-        self.assertIn(("hermes", "kanban", "boards", "create", "xhs-run", "--name", "小红书流程测试 · 未定稿", "--default-workdir", "/tmp/project", "--switch"), calls)
+        self.assertEqual(calls, [
+            ("hermes", "kanban", "boards", "set-default-workdir", "xhs-run", "/tmp/project"),
+            ("hermes", "kanban", "boards", "switch", "xhs-run"),
+        ])
+
+    def test_prepare_missing_board_creates_it(self) -> None:
+        calls: list[tuple[str, ...]] = []
+        proc = type("P", (), {"returncode": 0, "stdout": "", "stderr": ""})()
+        with patch.object(run, "list_boards", return_value={"default", "xhs-old"}), patch.object(
+            run, "command", side_effect=lambda args, **_: calls.append(tuple(args)) or proc
+        ):
+            run.prepare_board("xhs-run", Path("/tmp/project"))
+        self.assertEqual(calls, [(
+            "hermes", "kanban", "boards", "create", "xhs-run", "--name", "小红书流程测试 · 未定稿",
+            "--default-workdir", "/tmp/project", "--switch",
+        )])
+
+    def test_wait_for_board_ignores_historical_running_tasks(self) -> None:
+        cfg = run.RunnerConfig(profile="worker", workspace=Path("/tmp/project"), account_name="me", poll_seconds=1, timeout_minutes=1)
+        state = {"created": [{"key": "scout", "id": "current"}]}
+        tasks = [{"id": "old", "status": "running"}, {"id": "current", "status": "done"}]
+        with patch.object(run, "list_tasks", return_value=tasks), patch.object(
+            run, "apply_semantic_gates", return_value=False
+        ), patch.object(run.time, "sleep") as sleep:
+            self.assertEqual(run.wait_for_board("xhs-run", state, cfg), tasks)
+        sleep.assert_not_called()
+
+    def test_timeout_reports_only_current_nonterminal_tasks(self) -> None:
+        cfg = run.RunnerConfig(profile="worker", workspace=Path("/tmp/project"), account_name="me", poll_seconds=1, timeout_minutes=1)
+        state = {"created": [
+            {"key": "scout", "id": "current-running", "title": "Scout"},
+            {"key": "chair", "id": "current-done", "title": "Chair"},
+        ]}
+        tasks = [
+            {"id": "old", "status": "ready", "assignee": "other"},
+            {"id": "current-running", "status": "running", "assignee": "worker"},
+            {"id": "current-done", "status": "done", "assignee": "worker"},
+        ]
+        with patch.object(run, "list_tasks", return_value=tasks), patch.object(
+            run, "apply_semantic_gates", return_value=False
+        ), patch.object(run.time, "monotonic", side_effect=[0, 61]):
+            with self.assertRaises(TimeoutError) as caught:
+                run.wait_for_board("xhs-run", state, cfg)
+        message = str(caught.exception)
+        self.assertIn("scout", message)
+        self.assertIn("current-running", message)
+        self.assertIn("running", message)
+        self.assertNotIn("old", message)
+        self.assertNotIn("current-done", message)
 
 
 class ResultTests(unittest.TestCase):
@@ -179,10 +238,18 @@ class SemanticGateTests(unittest.TestCase):
         activated: list[str] = []
         with patch.object(run, "latest_run", return_value={"metadata": {"status": "FOUND"}}), patch.object(
             run, "activate_waiting_task", side_effect=lambda _board, task_id, _profile: activated.append(task_id)
-        ), patch.object(run, "finish_without_worker"):
+        ), patch.object(run, "dispatch_board") as dispatch, patch.object(run, "finish_without_worker"):
             changed = run.apply_semantic_gates("xhs-run", self.state(), tasks)
         self.assertTrue(changed)
         self.assertEqual(activated, ["review-a", "review-b"])
+        dispatch.assert_called_once_with("xhs-run", max_tasks=2)
+
+    def test_semantic_gate_without_new_assignments_does_not_dispatch(self) -> None:
+        tasks = [{"id": "scout", "status": "running", "assignee": "worker"}]
+        with patch.object(run, "dispatch_board") as dispatch:
+            changed = run.apply_semantic_gates("xhs-run", self.state(), tasks)
+        self.assertFalse(changed)
+        dispatch.assert_not_called()
 
     def test_reviews_complete_activate_chair_even_when_they_request_revision(self) -> None:
         tasks = [
@@ -201,7 +268,7 @@ class SemanticGateTests(unittest.TestCase):
         activated: list[str] = []
         with patch.object(run, "latest_run", side_effect=lambda _board, task_id: runs[task_id]), patch.object(
             run, "activate_waiting_task", side_effect=lambda _board, task_id, _profile: activated.append(task_id)
-        ), patch.object(run, "finish_without_worker"):
+        ), patch.object(run, "dispatch_board"), patch.object(run, "finish_without_worker"):
             changed = run.apply_semantic_gates("xhs-run", self.state(), tasks)
         self.assertTrue(changed)
         self.assertEqual(activated, ["chair"])
@@ -266,7 +333,7 @@ class SemanticGateTests(unittest.TestCase):
         activated: list[str] = []
         with patch.object(run, "latest_run", side_effect=lambda _board, task_id: runs[task_id]), patch.object(
             run, "activate_waiting_task", side_effect=lambda _board, task_id, _profile: activated.append(task_id)
-        ), patch.object(run, "finish_without_worker"):
+        ), patch.object(run, "dispatch_board"), patch.object(run, "finish_without_worker"):
             changed = run.apply_semantic_gates("xhs-run", self.state(), tasks)
         self.assertTrue(changed)
         self.assertEqual(activated, ["publish-verify"])
