@@ -24,14 +24,18 @@ RUNTIME_ROOT_FILES = ("current-run.json", "full-e2e-current.json")
 ACTIVE_STATUSES = {"triage", "todo", "scheduled", "ready", "running", "review", "blocked"}
 WAITING_STATUSES = {"triage", "todo", "scheduled", "ready", "blocked"}
 
-# When the scout stage finds the Xiaohongshu login lost, the runner parks the
-# whole campaign instead of spinning cheap rounds: the remaining cards stay
-# blocked (visible on the board) and the runner sleeps, then re-checks.
+# When the scout stage finds the Xiaohongshu login lost, the runner blocks the
+# remaining cards (they stay visible on the board as the "waiting for a human"
+# signal) and then stops the whole loop. Restoring the session needs a QR scan by
+# a person, so there is nothing useful to do until an operator restarts the
+# runner by hand: sleeping or spinning more rounds would only burn memory.
 LOGIN_REQUIRED_REASON = (
     "小红书登录态失效（scout 返回 LOGIN_REQUIRED）：等待人工扫码登录后再继续，本卡保持阻塞，禁止自动重试"
 )
-LOGIN_PARK_SECONDS = int(os.environ.get("XHS_LOGIN_PARK_SECONDS", 6 * 3600))
-LOGIN_PARK_POLL_SECONDS = int(os.environ.get("XHS_LOGIN_PARK_POLL_SECONDS", 60))
+
+
+class LoginRequired(Exception):
+    """Raised when scout reports a lost Xiaohongshu login; aborts the round."""
 
 
 @dataclass(frozen=True)
@@ -198,31 +202,6 @@ def block_for_login(board: str, task_ids: list[str], reason: str = LOGIN_REQUIRE
         command(["hermes", "kanban", "--board", board, "block", task_id, reason], check=False)
 
 
-def park_while_login_missing(
-    board: str,
-    task_ids: list[str],
-    *,
-    seconds: int | None = None,
-) -> float:
-    """Sleep a long time instead of churning rounds while the login is gone.
-
-    Returns early (in at most one poll interval) once an operator unblocks any
-    card, so logging back in and unblocking revives the pipeline immediately.
-    Returns the number of seconds slept.
-    """
-    if not task_ids or (LOGIN_PARK_SECONDS if seconds is None else seconds) <= 0:
-        return 0.0
-    limit = LOGIN_PARK_SECONDS if seconds is None else seconds
-    started = time.monotonic()
-    deadline = started + limit
-    while time.monotonic() < deadline:
-        time.sleep(min(max(LOGIN_PARK_POLL_SECONDS, 1), max(1.0, deadline - time.monotonic())))
-        statuses = {task.get("id"): task.get("status") for task in list_tasks(board)}
-        if any(statuses.get(task_id) != "blocked" for task_id in task_ids):
-            break
-    return round(time.monotonic() - started, 1)
-
-
 def _result_status(run: dict[str, Any]) -> str | None:
     metadata = run.get("metadata") or {}
     return (
@@ -237,12 +216,12 @@ def apply_semantic_gates(
     board: str,
     state: dict[str, Any],
     tasks: list[dict[str, Any]],
-) -> bool | str:
+) -> bool:
     """Launch the quality roundtable and keep irreversible actions gated.
 
-    Returns True when it changed the board, ``"parked"`` when it blocked the
-    remaining cards and slept because the Xiaohongshu login is missing, and
-    False when there is nothing to do.
+    Returns True when it changed the board and False when there is nothing to
+    do. Raises :class:`LoginRequired` after blocking the remaining cards when
+    the scout reports that the Xiaohongshu login is missing.
     """
     created = state.get("created", [])
     key_to_id = {item.get("key"): item.get("id") for item in created}
@@ -287,24 +266,22 @@ def apply_semantic_gates(
     if scout != "FOUND":
         if scout == "LOGIN_REQUIRED":
             # The scout agent found the Xiaohongshu login lost. A human has to
-            # scan the QR code, so block the remaining cards and park the
-            # campaign instead of sampling the same failure every few minutes.
+            # scan the QR code, so block the remaining cards — they stay visible
+            # on the board as the signal that the campaign is waiting — and then
+            # abort the runner instead of sampling the same failure again.
             pending = [
                 key_to_id[key] for key in downstream
                 if key_to_id.get(key)
                 and task_by_id.get(key_to_id[key], {}).get("status") in WAITING_STATUSES
             ]
             block_for_login(board, pending)
-            parked = park_while_login_missing(board, pending)
-            if parked:
-                print(
-                    f"[login-gate] scout={scout}; {len(pending)} cards blocked; parked {parked}s "
-                    f"awaiting manual Xiaohongshu login",
-                    file=sys.stderr,
-                    flush=True,
-                )
-            skip(downstream, f"scout ended with {scout}")
-            return "parked"
+            print(
+                f"[login-gate] scout={scout}; {len(pending)} cards blocked; "
+                f"runner stopping until an operator restores the Xiaohongshu login",
+                file=sys.stderr,
+                flush=True,
+            )
+            raise LoginRequired(f"scout reported {scout}")
         return skip(downstream, f"scout ended with {scout}")
 
     # Both reviewers run in parallel. Their job is to improve the answer; PASS,
@@ -347,11 +324,6 @@ def wait_for_board(board: str, state: dict[str, Any], cfg: RunnerConfig) -> list
         gate = apply_semantic_gates(board, state, tasks)
         if gate:
             tasks = list_tasks(board)
-        if gate == "parked":
-            # The login park can outlast the per-campaign timeout; the round
-            # gets a fresh budget so it can finish cleanly after an operator
-            # restores the Xiaohongshu session.
-            deadline = time.monotonic() + cfg.timeout_minutes * 60
         if board_is_terminal(tasks, current_task_ids):
             return tasks
         if time.monotonic() >= deadline:
@@ -504,6 +476,9 @@ def execute_campaign(root: Path, cfg: RunnerConfig, *, pipeline_config: Path | N
             board = started_board
             tasks = wait_for_board(started_board, state, cfg)
             result = compact_result(started_board, state, tasks)
+    except LoginRequired as exc:
+        # Not an error: a human has to scan the QR code and restart the runner.
+        result = {"status": "LOGIN_REQUIRED", "detail": str(exc)}
     except Exception as exc:
         result = {"status": "ERROR", "error": f"{type(exc).__name__}: {exc}"}
     finally:
@@ -566,7 +541,11 @@ def main() -> int:
     text = json.dumps(result, ensure_ascii=False, indent=2)
     max_chars = cfg.max_output_chars if cfg is not None else 6000
     print(text if len(text) <= max_chars else text[:max_chars] + "\n...TRUNCATED")
-    return 0 if result.get("status") == "COMPLETED" else 1
+    status = result.get("status")
+    if status == "LOGIN_REQUIRED":
+        # Distinct exit code so run_loop.sh stops instead of starting a new round.
+        return 3
+    return 0 if status == "COMPLETED" else 1
 
 
 if __name__ == "__main__":

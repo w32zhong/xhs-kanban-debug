@@ -641,3 +641,13 @@ v0.8 因 Gemini 重复崩溃和搜索框失焦废弃。已删除整板、清理�
 - 休眠时长可能超过每轮 45 分钟上限，故 `wait_for_board` 在 park 返回后重置本轮超时预算，避免把「等待人工登录」误报成 TimeoutError。
 - 只改 `run.py` 一处：不动判断节点、审核冗余、prompt、schema 与发布路径，不新增测试文件。
 - 实测（临时看板，验后已删除）：5 张下游卡 8 秒内全部 blocked 并带原因注释；park 严格按预算休眠（20 秒、90 秒两次实测）；人工 unblock 后提前唤醒（120 秒预算下 10.6 秒返回）；park 超过本轮超时后 `wait_for_board` 仍正常返回 terminal。
+
+## v0.50 — 登录态失效时阻塞看板后直接停止循环
+
+- 用户要求取消 v0.49 的「休眠 + 每 60 秒偷看」机制：登录恢复必须由本人扫码，轮询没有任何收益，只会白占资源。因此把 park 改为**阻塞后直接退出**。
+- scout 返回 `LOGIN_REQUIRED` 时，本轮剩余 5 张卡（review-a、review-b、chair、publish-send、publish-verify）仍按 v0.49 的方式 `promote` 后 `block`，原因写在卡上；随后抛 `LoginRequired` 中止本轮，不再调用 `skip()`。**卡片保持 blocked 状态不动，不完成、不归档、不删除**，看板上一直显示「等待人工登录」。
+- `run.py` 以退出码 3 表示「等待人工登录」；`run_loop.sh` 收到 3 就打印提示并退出整个循环，等待人工重启服务（Supervisor 为 `autorestart=false`，服务停在 EXITED，不会自我复活）。退出码 0/1 的语义不变，普通失败仍按原有间隔继续下一轮。
+- 删除 `park_while_login_missing()` 与 `XHS_LOGIN_PARK_SECONDS`、`XHS_LOGIN_PARK_POLL_SECONDS` 及其超时预算重置分支；`apply_semantic_gates()` 不再返回 `"parked"`，改为抛 `LoginRequired`。判断节点、审核冗余、prompt、schema、发布路径与发布门槛一律未动。
+- 本次改动为两处文件：`run.py`（阻塞后中止）与 `run_loop.sh`（识别退出码 3 后停止循环）——两者缺一不可，单独改 `run.py` 会让外层 `while true` 在 5 秒后重开一轮并重新派活。未新增任何测试文件。
+- 零成本实测（`/tmp` 桩程序替换 `run.py`，不派 worker、不花钱）：退出码 3 时打印提示并以 0 退出；退出码 1 时按 `XHS_LOOP_SLEEP_SECONDS` 继续循环。
+- 真实链路的「scout 判定 LOGIN_REQUIRED → 卡片 blocked → 循环退出」待下次真实运行确认；当前运行中的进程仍是 v0.49 的休眠版本，可继续停留在休眠状态。
