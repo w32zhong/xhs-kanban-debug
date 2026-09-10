@@ -632,3 +632,12 @@ v0.8 因 Gemini 重复崩溃和搜索框失焦废弃。已删除整板、清理�
 - 清理已删除测试遗留的字节码 `__pycache__/test_*.pyc`。
 - 经全仓引用核查后保留：`highclaws-features.md` 仍是 chair/review prompt 与角度库共同依赖的产品事实唯一来源；`SCOUT-REFINEMENT.md` 与 `scout-pipeline.json` 仍是 `run.py --scout-only` 的现行调试路径；`source-archive/` 维持“可疑参考、不作执行依据”的口径。
 - 修正本文件版本顺序：v0.47 此前被插在 v0.1 之前，现统一为时间正序、最新在末尾，并在文件头注明。
+
+## v0.49 — 登录态失效时阻塞看板并长时间休眠等待
+
+- scout 返回 `LOGIN_REQUIRED` 后，不再让整轮草草结束、下一轮立刻重来：runner 先把本轮剩余卡片（review-a、review-b、chair、publish-send、publish-verify）置为 blocked，并把原因写在卡上（先 `promote` 再 `block`，因为 `hermes kanban block` 只接受 running/ready 的卡），然后长时间休眠等待人工扫码登录。
+- blocked 是 sticky 状态：派发器不会重新拉起这些卡，看板上直接可见「等待人工登录」，不会再有 5 秒一轮的空转。
+- 休眠期间每 60 秒检查一次，任一卡片被人工 unblock 就立即提前唤醒；随后本轮按既有语义门以 SKIPPED 收尾，下一轮自动重新侦察并继续正常流程。默认最长休眠 6 小时，可用 `XHS_LOGIN_PARK_SECONDS`、`XHS_LOGIN_PARK_POLL_SECONDS` 调整。
+- 休眠时长可能超过每轮 45 分钟上限，故 `wait_for_board` 在 park 返回后重置本轮超时预算，避免把「等待人工登录」误报成 TimeoutError。
+- 只改 `run.py` 一处：不动判断节点、审核冗余、prompt、schema 与发布路径，不新增测试文件。
+- 实测（临时看板，验后已删除）：5 张下游卡 8 秒内全部 blocked 并带原因注释；park 严格按预算休眠（20 秒、90 秒两次实测）；人工 unblock 后提前唤醒（120 秒预算下 10.6 秒返回）；park 超过本轮超时后 `wait_for_board` 仍正常返回 terminal。

@@ -24,6 +24,15 @@ RUNTIME_ROOT_FILES = ("current-run.json", "full-e2e-current.json")
 ACTIVE_STATUSES = {"triage", "todo", "scheduled", "ready", "running", "review", "blocked"}
 WAITING_STATUSES = {"triage", "todo", "scheduled", "ready", "blocked"}
 
+# When the scout stage finds the Xiaohongshu login lost, the runner parks the
+# whole campaign instead of spinning cheap rounds: the remaining cards stay
+# blocked (visible on the board) and the runner sleeps, then re-checks.
+LOGIN_REQUIRED_REASON = (
+    "小红书登录态失效（scout 返回 LOGIN_REQUIRED）：等待人工扫码登录后再继续，本卡保持阻塞，禁止自动重试"
+)
+LOGIN_PARK_SECONDS = int(os.environ.get("XHS_LOGIN_PARK_SECONDS", 6 * 3600))
+LOGIN_PARK_POLL_SECONDS = int(os.environ.get("XHS_LOGIN_PARK_POLL_SECONDS", 60))
+
 
 @dataclass(frozen=True)
 class RunnerConfig:
@@ -177,6 +186,43 @@ def finish_without_worker(board: str, task_id: str, reason: str) -> None:
     ])
 
 
+def block_for_login(board: str, task_ids: list[str], reason: str = LOGIN_REQUIRED_REASON) -> None:
+    """Stickily block the pending cards so the board visibly waits for a human.
+
+    ``block`` only accepts running/ready cards, so todo cards are promoted
+    first. Sticky blocks survive dispatcher passes: nothing is respawned until
+    an operator unblocks the cards.
+    """
+    for task_id in task_ids:
+        command(["hermes", "kanban", "--board", board, "promote", task_id, reason, "--force"], check=False)
+        command(["hermes", "kanban", "--board", board, "block", task_id, reason], check=False)
+
+
+def park_while_login_missing(
+    board: str,
+    task_ids: list[str],
+    *,
+    seconds: int | None = None,
+) -> float:
+    """Sleep a long time instead of churning rounds while the login is gone.
+
+    Returns early (in at most one poll interval) once an operator unblocks any
+    card, so logging back in and unblocking revives the pipeline immediately.
+    Returns the number of seconds slept.
+    """
+    if not task_ids or (LOGIN_PARK_SECONDS if seconds is None else seconds) <= 0:
+        return 0.0
+    limit = LOGIN_PARK_SECONDS if seconds is None else seconds
+    started = time.monotonic()
+    deadline = started + limit
+    while time.monotonic() < deadline:
+        time.sleep(min(max(LOGIN_PARK_POLL_SECONDS, 1), max(1.0, deadline - time.monotonic())))
+        statuses = {task.get("id"): task.get("status") for task in list_tasks(board)}
+        if any(statuses.get(task_id) != "blocked" for task_id in task_ids):
+            break
+    return round(time.monotonic() - started, 1)
+
+
 def _result_status(run: dict[str, Any]) -> str | None:
     metadata = run.get("metadata") or {}
     return (
@@ -191,8 +237,13 @@ def apply_semantic_gates(
     board: str,
     state: dict[str, Any],
     tasks: list[dict[str, Any]],
-) -> bool:
-    """Launch the quality roundtable and keep irreversible actions gated."""
+) -> bool | str:
+    """Launch the quality roundtable and keep irreversible actions gated.
+
+    Returns True when it changed the board, ``"parked"`` when it blocked the
+    remaining cards and slept because the Xiaohongshu login is missing, and
+    False when there is nothing to do.
+    """
     created = state.get("created", [])
     key_to_id = {item.get("key"): item.get("id") for item in created}
     task_by_id = {task.get("id"): task for task in tasks}
@@ -232,8 +283,29 @@ def apply_semantic_gates(
     scout = stage_status("scout")
     if scout is None:
         return False
+    downstream = ["review-a", "review-b", "chair", "publish-send", "publish-verify"]
     if scout != "FOUND":
-        return skip(["review-a", "review-b", "chair", "publish-send", "publish-verify"], f"scout ended with {scout}")
+        if scout == "LOGIN_REQUIRED":
+            # The scout agent found the Xiaohongshu login lost. A human has to
+            # scan the QR code, so block the remaining cards and park the
+            # campaign instead of sampling the same failure every few minutes.
+            pending = [
+                key_to_id[key] for key in downstream
+                if key_to_id.get(key)
+                and task_by_id.get(key_to_id[key], {}).get("status") in WAITING_STATUSES
+            ]
+            block_for_login(board, pending)
+            parked = park_while_login_missing(board, pending)
+            if parked:
+                print(
+                    f"[login-gate] scout={scout}; {len(pending)} cards blocked; parked {parked}s "
+                    f"awaiting manual Xiaohongshu login",
+                    file=sys.stderr,
+                    flush=True,
+                )
+            skip(downstream, f"scout ended with {scout}")
+            return "parked"
+        return skip(downstream, f"scout ended with {scout}")
 
     # Both reviewers run in parallel. Their job is to improve the answer; PASS,
     # REVISE, and even a single REJECT all proceed to independent chair synthesis.
@@ -272,8 +344,14 @@ def wait_for_board(board: str, state: dict[str, Any], cfg: RunnerConfig) -> list
     created_by_id = {item.get("id"): item for item in created}
     while True:
         tasks = list_tasks(board)
-        if apply_semantic_gates(board, state, tasks):
+        gate = apply_semantic_gates(board, state, tasks)
+        if gate:
             tasks = list_tasks(board)
+        if gate == "parked":
+            # The login park can outlast the per-campaign timeout; the round
+            # gets a fresh budget so it can finish cleanly after an operator
+            # restores the Xiaohongshu session.
+            deadline = time.monotonic() + cfg.timeout_minutes * 60
         if board_is_terminal(tasks, current_task_ids):
             return tasks
         if time.monotonic() >= deadline:
