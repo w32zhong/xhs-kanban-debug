@@ -19,7 +19,7 @@
 
 ## 浏览器 session 隔离硬规则
 
-先 source `PARAM_FILE` 取得 `SESSION_NAME`。**每一条** browser 命令都必须显式写成 `agent-browser --session "$SESSION_NAME" --pin-tab ...`，包括 open、reload、snapshot、read、click、scroll、back、get、wait。禁止依赖默认 session，禁止省略 `--session` 或 `--pin-tab`，禁止访问、关闭、导航或复用其他 session 的标签页。
+先 source `PARAM_FILE` 取得 `SESSION_NAME`。**首次** browser 命令必须显式写成 `agent-browser --session "$SESSION_NAME" --pin-tab ...`；pin 是 sticky 的，后续命令显式写 `agent-browser --session "$SESSION_NAME" ...` 即可，无需重复 `--pin-tab`。禁止依赖默认 session，禁止省略 `--session`，禁止访问、关闭、导航或复用其他 session 的标签页。
 
 `PARAM_FILE` 必须提供：
 

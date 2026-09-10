@@ -12,7 +12,6 @@ from __future__ import annotations
 import argparse
 import json
 import re
-import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -195,60 +194,17 @@ def cleanup_files(prefix: str | None, dry_run: bool) -> dict[str, Any]:
     return {"status": "PARTIAL" if errors else "COMPLETED", "deleted": deleted, "errors": errors}
 
 
-def browser(*args: str) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(["agent-browser", *args], text=True, capture_output=True)
-
-
-def cleanup_tabs(dry_run: bool) -> dict[str, Any]:
-    listed = browser("tab", "list", "--json")
-    if listed.returncode:
-        return {"status": "PARTIAL", "closed": [], "errors": [listed.stderr or listed.stdout], "remaining": []}
-    tabs = json.loads(listed.stdout).get("data", {}).get("tabs", [])
-    preserve: set[str] = set()
-    for tab in tabs:
-        url = tab.get("url", "")
-        title = tab.get("title", "")
-        if title == "Hermes Kanban" or "sandbox_env:8002" in url or ":10012/" in url:
-            preserve.add(tab["targetId"])
-    xhs = [tab for tab in tabs if "xiaohongshu.com" in tab.get("url", "")]
-    chosen = next((tab for tab in xhs if tab.get("active")), xhs[0] if xhs else None)
-    if chosen:
-        preserve.add(chosen["targetId"])
-    closed: list[dict[str, Any]] = []
-    errors: list[str] = []
-    for tab in tabs:
-        if tab["targetId"] in preserve:
-            continue
-        ok = True
-        detail = "dry-run"
-        if not dry_run:
-            proc = browser("tab", "close", tab["tabId"])
-            ok = proc.returncode == 0
-            detail = proc.stderr or proc.stdout
-            if not ok:
-                errors.append(f"{tab['tabId']}: {detail}")
-        closed.append({"tabId": tab["tabId"], "title": tab.get("title", ""), "ok": ok})
-    final = tabs
-    if not dry_run:
-        relisted = browser("tab", "list", "--json")
-        if relisted.returncode == 0:
-            final = json.loads(relisted.stdout).get("data", {}).get("tabs", [])
-        else:
-            errors.append(relisted.stderr or relisted.stdout)
-    return {"status": "PARTIAL" if errors else "COMPLETED", "closed": closed, "errors": errors, "remaining": final}
-
-
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", required=True, help="JSON file containing structured publish/verify state")
     parser.add_argument("--dry-run", action="store_true")
-    parser.add_argument("--skip-tabs", action="store_true")
+
     args = parser.parse_args()
     data = json.loads(Path(args.input).read_text(encoding="utf-8"))
     d, errors = validate(data)
     coordination = decide(d, errors)
     files = cleanup_files(d.get("RUN_PREFIX_LITERAL"), args.dry_run)
-    tabs = {"status": "SKIPPED", "closed": [], "errors": [], "remaining": []} if args.skip_tabs else cleanup_tabs(args.dry_run)
+
     output = {
         "coordination": coordination,
         "validation_errors": errors,
@@ -256,11 +212,7 @@ def main() -> None:
         "files_deleted_count": len(files["deleted"]),
         "files_deleted": files["deleted"],
         "file_errors": files["errors"],
-        "tabs_cleanup_status": tabs["status"],
-        "tabs_closed_count": len(tabs["closed"]),
-        "tabs_closed": tabs["closed"],
-        "tab_errors": tabs["errors"],
-        "remaining_tabs": tabs["remaining"],
+
         "board_archive_requested": d.get("ARCHIVE_BOARD_LITERAL", "NO"),
         "content_modified_by_coordinator": "NO",
         "vision_calls": 0,

@@ -131,7 +131,7 @@ def main() -> None:
 
     # Create tasks sequentially so parent IDs are available at creation time.
     for index, task in enumerate(config["tasks"], start=1):
-        session_name = f"xhs-{suffix[-6:]}-{index}"
+        session_name = f"xhs-kanban-{suffix[-6:]}-{index}"
         prompt_path = str(ROOT / task["prompt"])
         param_path = params_dir / f"{session_name}.sh"
 
@@ -142,7 +142,11 @@ def main() -> None:
         target_excerpt = target_data.get("target_comment_excerpt") or task.get("target_comment_excerpt", "")
         approved_draft = target_data.get("approved_draft") or task.get("approved_draft", "")
 
-        param_content = f"SESSION_NAME={shlex.quote(session_name)}\n"
+        param_content = (
+            f"SESSION_NAME={shlex.quote(session_name)}\n"
+            f"export AGENT_BROWSER_SESSION={shlex.quote(session_name)}\n"
+            "export AGENT_BROWSER_SOCKET_DIR=/tmp\n"
+        )
         if task["key"] == "scout":
             param_content += f"ACCOUNT_NAME_LITERAL={shlex.quote(cli.account_name)}\n"
         if keyword:
@@ -172,7 +176,8 @@ def main() -> None:
             body_lines.append(f"{key}: {value}")
         body_lines.append("禁止 git/pwd/env/目录搜索/hermes kanban CLI/SQLite/额外 skill；严格遵守所引用 prompt 的副作用边界。")
         body_lines.append(
-            '若使用浏览器：每一条命令必须显式使用 agent-browser --session "$SESSION_NAME" --pin-tab；'
+            '若使用浏览器：首次命令必须显式使用 agent-browser --session "$SESSION_NAME" --pin-tab；'
+            '后续每一条命令必须显式使用 agent-browser --session "$SESSION_NAME"，无需重复 --pin-tab；'
             "禁止依赖默认 session，禁止访问、关闭或复用其他 session 的标签页。"
         )
 
@@ -205,6 +210,12 @@ def main() -> None:
             "target_id": target_data.get("id", "dynamic"),
             "target_title": target_title,
         })
+
+    # Save session names so the final guard can close tabs even after daemons are reaped.
+    (runtime_dir / "browser-sessions.json").write_text(
+        json.dumps([item["session_name"] for item in created], ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
 
     dispatched = run(
         "--board", board, "dispatch", "--max", str(config["max_parallel"]), "--json",
