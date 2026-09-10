@@ -127,6 +127,14 @@ hermes kanban --board xhs-run log <task-id>
 权威运行规范在：
 
 - `pipeline.json`：任务图；
-- `prompts/`：worker 操作规则；
+- `prompts/`：worker 操作规则（现行五份：`scout-worker`、`review-worker`、`chair-worker`、`publish-send-worker`、`publish-verify-worker`）；
 - `schemas/`：结果格式；
+- `highclaws-features.md`：产品事实唯一来源，圆桌与委员长只能据此引用真实能力；
+- `roundtable-angles.md`：圆桌评审角度库；
 - `prompts/xhs-reply-话术-原典.md`：必须逐字保留的原始话术资产。
+
+其它目录说明：
+
+- `source-archive/`：早期资料留档，**仅作可疑参考，不作执行依据**；
+- `SCOUT-REFINEMENT.md` + `scout-pipeline.json`：`--scout-only` 单阶段调试路径；
+- 独立的 `search-worker`、独立 `verify-worker` 等早期阶段已废弃，历史见 `CHANGELOG.md`。

@@ -1,13 +1,8 @@
 # 流程调试变更记录
 
-## v0.47 — 真实发送、独立复核与失败协调收敛
-
-- 真实发送在 target-c、target-d、target-e 三个不同目标上连续通过：`SEND_SUCCESS`、`READ_TEXT`、`vision_calls=0`，发送后编辑器重置。
-- 新增 `publish-verify-worker.md` 与结果 schema；修复单评论楼层的可见线程识别、状态机从头重跑、未穷尽线程误报不存在等问题。
-- 最终独立复核在 target-c、target-d、target-a 三个不同目标上连续通过：目标线程已穷尽、定稿逐字恰好一次、其他楼层无重复、零 Vision、零页面修改。
-- 新增纯结构化失败协调：错发与重复只标记人工处理并禁止重试；明确未发送且复核确认不存在时仅允许全新 session 重试一次；发送结果不明确或线程未穷尽时禁止自动重试并转人工复核。
-- 扩展 runner 的 `param_vars`，使非浏览器阶段可从参数文件读取不可变状态；非发布阶段不再强制轮换目标池。
-- 每轮均实际使用 `process wait` 观察 watcher，并在完成后删除临时看板、停止 watcher、关闭任务标签。最终只保留正式 `xhs-debug` 看板与 Kanban UI 标签。
+> 本文件按时间顺序记录调试版本，**最新版本在文件末尾**。
+> 当前生产流程为 `dynamic-e2e-quality-roundtable-v3`：`搜索与核验 → 双委员圆桌 → 委员长定稿 → 精确发布 → 独立发布复核`。
+> 早期单阶段调试稿（独立 `search-worker`、独立 `verify-worker`、`e2e_loop.py`、`watch_run.py`）已废弃，见文末 v0.48。
 
 ## v0.1 — 搜索阶段最小闭环
 
@@ -615,3 +610,25 @@ v0.8 因 Gemini 重复崩溃和搜索框失焦废弃。已删除整板、清理�
 - Mimo 首轮尚未执行任何网页动作即因 provider 缺少 `x-opencode-session` 请求头失败；该问题属于模型接入环境，不是小红书流程缺陷，因此不修改浏览器 prompt。
 - 用户明确要求 Mimo 暂时不要使用，只用 Qwen。立即废弃 Mimo board/task/session，不再修理或重试其 provider。
 - `pipeline.json` 恢复唯一 assignee `agent-26c319b9362c7cec`（Qwen）；后续所有调试轮继续保持空 skills、全新上下文和本地文档驱动。
+
+## v0.45–v0.46 — 未单独落盘
+
+- 这两个版本的调试细节没有单独记录，其成果已并入 v0.47 的真实发送与独立复核收敛。
+
+## v0.47 — 真实发送、独立复核与失败协调收敛
+
+- 真实发送在 target-c、target-d、target-e 三个不同目标上连续通过：`SEND_SUCCESS`、`READ_TEXT`、`vision_calls=0`，发送后编辑器重置。
+- 新增 `publish-verify-worker.md` 与结果 schema；修复单评论楼层的可见线程识别、状态机从头重跑、未穷尽线程误报不存在等问题。
+- 最终独立复核在 target-c、target-d、target-a 三个不同目标上连续通过：目标线程已穷尽、定稿逐字恰好一次、其他楼层无重复、零 Vision、零页面修改。
+- 新增纯结构化失败协调：错发与重复只标记人工处理并禁止重试；明确未发送且复核确认不存在时仅允许全新 session 重试一次；发送结果不明确或线程未穷尽时禁止自动重试并转人工复核。
+- 扩展 runner 的 `param_vars`，使非浏览器阶段可从参数文件读取不可变状态；非发布阶段不再强制轮换目标池。
+- 每轮均实际使用 `process wait` 观察 watcher，并在完成后删除临时看板、停止 watcher、关闭任务标签。
+
+## v0.48 — 文档与计划清理
+
+- 删除过时的精简计划稿 `.hermes/plans/2026-09-09_*.md`。该稿的三条主张与既定原则冲突，全部不予采纳：把 6 个 Agent 节点精简为 3 个（本流程必须保留多阶段审核冗余）、引入 unittest（本项目不留测试文件）、用 subagent 驱动实施（本项目由主代理直接完成）。
+- 删除已被取代的单阶段调试件：`prompts/search-worker.md` 与 `schemas/search-result.md`（已被 scout 阶段取代）、`prompts/verify-worker.md` 与 `schemas/verify-result.md`（已被 `publish-verify` 阶段取代）。
+- 删除无任何引用的历史脚本 `e2e_loop.py`、`watch_run.py`，以及孤立的九行样例 `review-case.md`。
+- 清理已删除测试遗留的字节码 `__pycache__/test_*.pyc`。
+- 经全仓引用核查后保留：`highclaws-features.md` 仍是 chair/review prompt 与角度库共同依赖的产品事实唯一来源；`SCOUT-REFINEMENT.md` 与 `scout-pipeline.json` 仍是 `run.py --scout-only` 的现行调试路径；`source-archive/` 维持“可疑参考、不作执行依据”的口径。
+- 修正本文件版本顺序：v0.47 此前被插在 v0.1 之前，现统一为时间正序、最新在末尾，并在文件头注明。
