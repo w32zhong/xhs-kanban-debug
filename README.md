@@ -123,12 +123,6 @@ hermes kanban --board xhs-run log <task-id>
 - 无法确认回复属于本轮、线程未穷尽或页面结构不明确：不删除，返回安全失败状态。
 - 禁止删除历史回复、其他账号回复或其他楼层内容。
 
-## 修改后测试
-
-```bash
-python3 -m unittest \
-  test_pipeline test_run test_watch_run test_finalize_run -v
-```
 
 权威运行规范在：
 
