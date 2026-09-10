@@ -389,14 +389,19 @@ def cleanup_new_runtime_files(root: Path, before: set[Path]) -> dict[str, Any]:
     return {"removed_count": len(removed), "errors": errors}
 
 
-def cleanup_browser_tabs(root: Path = ROOT) -> dict[str, Any]:
-    proc = command([sys.executable, str(root / "resource_guard.py"), "--force"], cwd=root, check=False)
+def run_final_guard(root: Path = ROOT) -> dict[str, Any]:
+    """Run autonomous prefix-based browser and project-temp cleanup."""
+    proc = command(
+        ["python3", str(root / "resource_guard.py"), "--final", "--root", str(root)],
+        cwd=root,
+        check=False,
+    )
     if proc.returncode:
         return {"ok": False, "error": (proc.stderr or proc.stdout).strip()[-1000:]}
     try:
-        return {"ok": True, **json.loads(proc.stdout)}
+        return json.loads(proc.stdout)
     except json.JSONDecodeError:
-        return {"ok": True, "detail": proc.stdout.strip()[-1000:]}
+        return {"ok": False, "error": "final guard returned invalid JSON"}
 
 
 def remove_board(board: str) -> dict[str, Any]:
@@ -425,8 +430,7 @@ def execute_campaign(root: Path, cfg: RunnerConfig, *, pipeline_config: Path | N
         result = {"status": "ERROR", "error": f"{type(exc).__name__}: {exc}"}
     finally:
         cleanup["board"] = {"ok": True, "kept": True, "slug": cfg.board_slug}
-        cleanup["tabs"] = cleanup_browser_tabs(root)
-        cleanup["files"] = cleanup_new_runtime_files(root, runtime_before)
+        cleanup["guard"] = run_final_guard(root)
     result["cleanup"] = cleanup
     result["elapsed_seconds"] = round(time.time() - started, 1)
     if board and "board" not in result:
